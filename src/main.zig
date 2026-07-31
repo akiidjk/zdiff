@@ -1,9 +1,10 @@
 const std = @import("std");
 const Io = std.Io;
 
-const zdiff = @import("zdiff");
+const diff = @import("zdiff").diff;
 
 pub fn main(init: std.process.Init) !void {
-    _ = init; // autofix
-
+    var script = try diff(init.gpa, "ciao", "ciai");
+    defer script.deinit(init.gpa);
+    std.debug.print("Diff res: {any}\n", .{script.items});
 }
