@@ -59,8 +59,97 @@ inline fn traceAt(trace: []const usize, d: usize, i: usize, MAX: usize) usize {
     return trace[d * (d + 1) / 2 + (i - (MAX - d)) / 2];
 }
 
-// this give the full path of operation
+pub fn getLenghtCommonprefix(left: []const u8, right: []const u8) usize {
+    var c: usize = 0;
+    const len: usize = @min(left.len, right.len);
+    for (0..len) |i| {
+        if (left[i] == right[i]) {
+            c += 1;
+        } else {
+            return c;
+        }
+    }
+    return c;
+}
+
+pub fn getLenghtCommonsuffix(left: []const u8, right: []const u8) usize {
+    const len = @min(left.len, right.len);
+    var c: usize = 0;
+    while (c < len and left[left.len - 1 - c] == right[right.len - 1 - c]) c += 1;
+    return c;
+}
+
+fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Script {
+    var fixedInner: Script = .empty;
+    errdefer fixedInner.deinit(alloc);
+
+    try fixedInner.ensureUnusedCapacity(alloc, inner.items.len + 2);
+
+    if (pre == 0 and suf == 0) {
+        fixedInner.appendSliceAssumeCapacity(inner.items);
+        return fixedInner;
+    }
+
+    if (inner.items.len == 0 and (pre != 0 or suf != 0)) {
+        fixedInner.appendAssumeCapacity(.{ .op = Op.KEEP, .len = pre + suf, .startNew = 0, .startOld = 0 });
+        return fixedInner;
+    }
+
+    if (pre != 0) {
+        const first = inner.items[0];
+        if (first.op == Op.KEEP) {
+            fixedInner.appendAssumeCapacity(.{ .op = Op.KEEP, .len = first.len + pre, .startNew = 0, .startOld = 0 });
+            fixedInner.appendSliceAssumeCapacity(inner.items[1..]);
+        } else {
+            fixedInner.appendAssumeCapacity(.{ .op = Op.KEEP, .len = pre, .startNew = 0, .startOld = 0 });
+            fixedInner.appendSliceAssumeCapacity(inner.items);
+        }
+    } else {
+        fixedInner.appendSliceAssumeCapacity(inner.items);
+    }
+
+    if (suf != 0) {
+        const last = inner.getLast();
+        if (last.op == Op.KEEP) {
+            const lastFixed = &fixedInner.items[fixedInner.items.len - 1];
+            lastFixed.len += suf;
+        } else {
+            var so = last.startOld;
+            var sn = last.startNew;
+            switch (last.op) {
+                .DELETE => so += last.len,
+                .INSERT => sn += last.len,
+                .KEEP => unreachable,
+            }
+            fixedInner.appendAssumeCapacity(.{
+                .op = Op.KEEP,
+                .len = suf,
+                .startOld = so,
+                .startNew = sn,
+            });
+        }
+    }
+
+    return fixedInner;
+}
+
+// is diffRaw but trimmed
 pub fn diff(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !Script {
+    const pre = getLenghtCommonprefix(left, right);
+    const suf = getLenghtCommonsuffix(left[pre..], right[pre..]);
+
+    var inner = try diffRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf]);
+    defer inner.deinit(allocator);
+    for (inner.items) |*item| {
+        item.startNew += pre;
+        item.startOld += pre;
+    }
+
+    return try addRun(allocator, pre, suf, inner);
+}
+
+// this give the full path of operation
+pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !Script {
     const N = left.len;
     const M = right.len;
     const MAX = N + M;
