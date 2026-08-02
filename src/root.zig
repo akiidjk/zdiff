@@ -9,6 +9,8 @@ pub const Op = enum {
 };
 pub const Edit = struct {
     op: Op,
+    startNew: usize,
+    startOld: usize,
     len: usize,
 };
 const Script = std.ArrayList(Edit);
@@ -129,7 +131,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
             if (currentOp == Op.KEEP) {
                 counter += 1;
             } else {
-                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter, .startNew = y, .startOld = x });
                 currentOp = Op.KEEP;
                 counter = 1;
             }
@@ -141,7 +143,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
             if (currentOp == Op.INSERT) { // Accumulo perche currentOp e' uguale alla run
                 counter += 1;
             } else { // OP CHANGE
-                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter, .startNew = y, .startOld = x });
                 currentOp = Op.INSERT;
                 counter = 1;
             }
@@ -149,7 +151,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
             if (currentOp == Op.DELETE) {
                 counter += 1;
             } else { // OP CHANGE
-                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter, .startNew = y, .startOld = x });
                 currentOp = Op.DELETE;
                 counter = 1;
             }
@@ -163,7 +165,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
         if (currentOp == Op.KEEP) {
             counter += 1;
         } else {
-            if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+            if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter, .startNew = y, .startOld = x });
             currentOp = Op.KEEP;
             counter = 1;
         }
@@ -172,7 +174,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
     }
 
     if (counter > 0) {
-        script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+        script.appendAssumeCapacity(.{ .op = currentOp, .len = counter, .startNew = y, .startOld = x });
     }
 
     std.mem.reverse(Edit, script.items);
@@ -186,6 +188,7 @@ pub fn applyScript(alloc: std.mem.Allocator, script: []const Edit, left: []const
     var i: usize = 0; // cursore su left
     var j: usize = 0; // cursore su right
     for (script) |step| {
+        if (step.startOld != i or step.startNew != j) return error.CursorMismatch;
         for (0..step.len) |_| {
             switch (step.op) {
                 .INSERT => {
