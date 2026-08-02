@@ -16,8 +16,14 @@ pub const Edit = struct {
 const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
 
-// This give only the number of operation and nothing else
 pub fn shortestEdit(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !?usize {
+    const pre = getLenghtCommonprefix(left, right);
+    const suf = getLenghtCommonsuffix(left[pre..], right[pre..]);
+    return try shortestEditRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf]);
+}
+
+// This give only the number of operation and nothing else
+pub fn shortestEditRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !?usize {
     const N = left.len;
     const M = right.len;
     const MAX = N + M;
