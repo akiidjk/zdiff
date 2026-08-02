@@ -16,14 +16,14 @@ pub const Edit = struct {
 const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
 
-pub fn shortestEdit(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !?usize {
+pub fn shortestEdit(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !?usize {
     const pre = getLenghtCommonprefix(left, right);
     const suf = getLenghtCommonsuffix(left[pre..], right[pre..]);
-    return try shortestEditRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf]);
+    return try shortestEditRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf], max_d);
 }
 
 // This give only the number of operation and nothing else
-pub fn shortestEditRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !?usize {
+pub fn shortestEditRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !?usize {
     const N = left.len;
     const M = right.len;
     const MAX = N + M;
@@ -39,6 +39,10 @@ pub fn shortestEditRaw(allocator: std.mem.Allocator, left: []const u8, right: []
 
     while (d <= MAX) : (d += 1) {
         k = MAX - d;
+
+        if (d > max_d) {
+            return error.TooDifferent;
+        }
         while (k <= MAX + d) : (k += 2) {
             if (k == MAX - d or (k != MAX + d and V[k - 1] < V[k + 1])) {
                 x = V[k + 1]; //  insert B[y]
@@ -140,11 +144,11 @@ fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scri
 }
 
 // is diffRaw but trimmed
-pub fn diff(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !Script {
+pub fn diff(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !Script {
     const pre = getLenghtCommonprefix(left, right);
     const suf = getLenghtCommonsuffix(left[pre..], right[pre..]);
 
-    var inner = try diffRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf]);
+    var inner = try diffRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf], max_d);
     defer inner.deinit(allocator);
     for (inner.items) |*item| {
         item.startNew += pre;
@@ -155,7 +159,7 @@ pub fn diff(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !
 }
 
 // this give the full path of operation
-pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8) !Script {
+pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !Script {
     const N = left.len;
     const M = right.len;
     const MAX = N + M;
@@ -173,6 +177,11 @@ pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8
     var y: usize = 0;
     while (d <= MAX) : (d += 1) {
         k = MAX - d;
+
+        if (d > max_d) {
+            return error.TooDifferent;
+        }
+
         while (k <= MAX + d) : (k += 2) {
             if (k == MAX - d or (k != MAX + d and V[k - 1] < V[k + 1])) {
                 x = V[k + 1]; //  insert B[y]

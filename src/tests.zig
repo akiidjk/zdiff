@@ -18,7 +18,7 @@ const ANSI_CYAN = "\x1b[36m";
 fn roundTrip(a: []const u8, b: []const u8) !void {
     const alloc = std.testing.allocator;
 
-    var script = try diff(alloc, a, b);
+    var script = try diff(alloc, a, b, 6726);
     defer script.deinit(alloc);
 
     const rebuilt = try applyScript(alloc, script.items, a, b);
@@ -50,7 +50,7 @@ fn checkInvariants(script: []const Edit, a: []const u8, b: []const u8) !void {
     const d = del + ins;
     try std.testing.expectEqual(a.len + b.len - 2 * keep, d);
 
-    const d_ref = (try shortestEdit(std.testing.allocator, a, b)).?;
+    const d_ref = (try shortestEdit(std.testing.allocator, a, b, 6726)).?;
     try std.testing.expectEqual(d_ref, d);
 
     try std.testing.expectEqual((a.len + b.len) % 2, d % 2);
@@ -73,7 +73,7 @@ const ExpectedRun = struct { op: Op, len: usize };
 fn expectRuns(a: []const u8, b: []const u8, expected: []const ExpectedRun) !void {
     const alloc = std.testing.allocator;
 
-    var script = try diff(alloc, a, b);
+    var script = try diff(alloc, a, b, 6726);
     defer script.deinit(alloc);
 
     try roundTrip(a, b);
@@ -202,7 +202,7 @@ test "known distances" {
         .{ .a = "aaaa", .b = "bbbb", .d = 8 },
     };
     for (cases) |c| {
-        const d = (try shortestEdit(alloc, c.a, c.b)).?;
+        const d = (try shortestEdit(alloc, c.a, c.b, 6726)).?;
         std.testing.expectEqual(c.d, d) catch |e| {
             std.debug.print("\ndistanza sbagliata: \"{s}\" -> \"{s}\": atteso {d}, trovato {d}\n", .{ c.a, c.b, c.d, d });
             return e;
@@ -332,7 +332,7 @@ test "corpus round-trip" {
 
         std.debug.print(ANSI_BLUE ++ "corpus round-trip: read a.len={d} b.len={d}\n" ++ ANSI_RESET, .{ a.len, b.len });
 
-        var script = try diff(alloc, a, b);
+        var script = try diff(alloc, a, b, 6726);
         defer script.deinit(alloc);
 
         std.debug.print(ANSI_BLUE ++ "corpus round-trip: diff produced script.items.len={d}\n" ++ ANSI_RESET, .{script.items.len});
