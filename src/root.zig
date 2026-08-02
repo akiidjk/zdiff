@@ -9,8 +9,7 @@ const Op = enum {
 };
 const Edit = struct {
     op: Op,
-    oldIndex: ?usize,
-    newIndex: ?usize,
+    len: usize,
 };
 const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
@@ -106,6 +105,8 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
     var script: Script = .empty;
     var x: usize = left.len;
     var y: usize = right.len;
+    var currentOp: Op = .KEEP;
+    var counter: usize = 0;
 
     try script.ensureTotalCapacity(allocator, (MAX - d) / 2 + d);
 
@@ -125,25 +126,55 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
         }
         const prev_x: usize = traceAt(trace, p, prev_k, MAX);
         const prev_y: usize = (prev_x + MAX) - prev_k;
+
         while (x > prev_x and y > prev_y) {
-            script.appendAssumeCapacity(.{ .op = Op.KEEP, .newIndex = y - 1, .oldIndex = x - 1 });
+            if (currentOp == Op.KEEP) {
+                counter += 1;
+            } else {
+                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+                currentOp = Op.KEEP;
+                counter = 1;
+            }
             x -= 1;
             y -= 1;
         }
 
         if (x == prev_x) {
-            script.appendAssumeCapacity(.{ .op = Op.INSERT, .newIndex = prev_y, .oldIndex = null });
+            if (currentOp == Op.INSERT) { // Accumulo perche currentOp e' uguale alla run
+                counter += 1;
+            } else { // OP CHANGE
+                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+                currentOp = Op.INSERT;
+                counter = 1;
+            }
         } else {
-            script.appendAssumeCapacity(.{ .op = Op.DELETE, .newIndex = null, .oldIndex = prev_x });
+            if (currentOp == Op.DELETE) {
+                counter += 1;
+            } else { // OP CHANGE
+                if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+                currentOp = Op.DELETE;
+                counter = 1;
+            }
         }
+
         x = prev_x;
         y = prev_y;
     }
 
     while (x > 0) {
-        script.appendAssumeCapacity(.{ .op = Op.KEEP, .newIndex = y - 1, .oldIndex = x - 1 });
+        if (currentOp == Op.KEEP) {
+            counter += 1;
+        } else {
+            if (counter > 0) script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
+            currentOp = Op.KEEP;
+            counter = 1;
+        }
         x -= 1;
         y -= 1;
+    }
+
+    if (counter > 0) {
+        script.appendAssumeCapacity(.{ .op = currentOp, .len = counter });
     }
 
     std.mem.reverse(Edit, script.items);
@@ -151,29 +182,31 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
     return script;
 }
 
-fn applyScript(alloc: std.mem.Allocator, script: []const Edit, left: []const u8, right: []const u8) ![]u8 {
+pub fn applyScript(alloc: std.mem.Allocator, script: []const Edit, left: []const u8, right: []const u8) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(alloc);
     var i: usize = 0; // cursore su left
     var j: usize = 0; // cursore su right
     for (script) |step| {
-        switch (step.op) {
-            .INSERT => {
-                if (j >= right.len) return error.CursorOverrun;
-                try out.append(alloc, right[j]);
-                j += 1;
-            },
-            .DELETE => {
-                if (i >= left.len) return error.CursorOverrun;
-                i += 1;
-            },
-            .KEEP => {
-                if (i >= left.len or j >= right.len) return error.CursorOverrun;
-                if (left[i] != right[j]) return error.KeepMismatch;
-                try out.append(alloc, left[i]);
-                i += 1;
-                j += 1;
-            },
+        for (0..step.len) |_| {
+            switch (step.op) {
+                .INSERT => {
+                    if (j >= right.len) return error.CursorOverrun;
+                    try out.append(alloc, right[j]);
+                    j += 1;
+                },
+                .DELETE => {
+                    if (i >= left.len) return error.CursorOverrun;
+                    i += 1;
+                },
+                .KEEP => {
+                    if (i >= left.len or j >= right.len) return error.CursorOverrun;
+                    if (left[i] != right[j]) return error.KeepMismatch;
+                    try out.append(alloc, left[i]);
+                    i += 1;
+                    j += 1;
+                },
+            }
         }
     }
 
