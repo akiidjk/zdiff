@@ -1,6 +1,8 @@
 const std = @import("std");
 const Io = std.Io;
 
+pub const hunk = @import("hunk.zig");
+
 const Frontier = []usize;
 pub const Op = enum {
     KEEP,
@@ -16,16 +18,16 @@ pub const Edit = struct {
 const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
 
-pub fn shortestEdit(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !?usize {
-    const pre = getLenghtCommonprefix(left, right);
-    const suf = getLenghtCommonsuffix(left[pre..], right[pre..]);
-    return try shortestEditRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf], max_d);
+pub fn shortestEdit(allocator: std.mem.Allocator, old: []const u8, new: []const u8, max_d: usize) !?usize {
+    const pre = getLenghtCommonprefix(old, new);
+    const suf = getLenghtCommonsuffix(old[pre..], new[pre..]);
+    return try shortestEditRaw(allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
 }
 
 // This give only the number of operation and nothing else
-pub fn shortestEditRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !?usize {
-    const N = left.len;
-    const M = right.len;
+pub fn shortestEditRaw(allocator: std.mem.Allocator, old: []const u8, new: []const u8, max_d: usize) !?usize {
+    const N = old.len;
+    const M = new.len;
     const MAX = N + M;
     if (MAX == 0) return 0;
     const V: Frontier = try allocator.alloc(usize, 2 * MAX + 1);
@@ -51,7 +53,7 @@ pub fn shortestEditRaw(allocator: std.mem.Allocator, left: []const u8, right: []
             }
 
             y = x + MAX - k;
-            while (x < N and y < M and left[x] == right[y]) { // snake
+            while (x < N and y < M and old[x] == new[y]) { // snake
                 x += 1;
                 y += 1;
             }
@@ -69,11 +71,11 @@ inline fn traceAt(trace: []const usize, d: usize, i: usize, MAX: usize) usize {
     return trace[d * (d + 1) / 2 + (i - (MAX - d)) / 2];
 }
 
-pub fn getLenghtCommonprefix(left: []const u8, right: []const u8) usize {
+pub fn getLenghtCommonprefix(old: []const u8, new: []const u8) usize {
     var c: usize = 0;
-    const len: usize = @min(left.len, right.len);
+    const len: usize = @min(old.len, new.len);
     for (0..len) |i| {
-        if (left[i] == right[i]) {
+        if (old[i] == new[i]) {
             c += 1;
         } else {
             return c;
@@ -82,10 +84,10 @@ pub fn getLenghtCommonprefix(left: []const u8, right: []const u8) usize {
     return c;
 }
 
-pub fn getLenghtCommonsuffix(left: []const u8, right: []const u8) usize {
-    const len = @min(left.len, right.len);
+pub fn getLenghtCommonsuffix(old: []const u8, new: []const u8) usize {
+    const len = @min(old.len, new.len);
     var c: usize = 0;
-    while (c < len and left[left.len - 1 - c] == right[right.len - 1 - c]) c += 1;
+    while (c < len and old[old.len - 1 - c] == new[new.len - 1 - c]) c += 1;
     return c;
 }
 
@@ -144,11 +146,11 @@ fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scri
 }
 
 // is diffRaw but trimmed
-pub fn diff(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !Script {
-    const pre = getLenghtCommonprefix(left, right);
-    const suf = getLenghtCommonsuffix(left[pre..], right[pre..]);
+pub fn diff(allocator: std.mem.Allocator, old: []const u8, new: []const u8, max_d: usize) !Script {
+    const pre = getLenghtCommonprefix(old, new);
+    const suf = getLenghtCommonsuffix(old[pre..], new[pre..]);
 
-    var inner = try diffRaw(allocator, left[pre .. left.len - suf], right[pre .. right.len - suf], max_d);
+    var inner = try diffRaw(allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
     defer inner.deinit(allocator);
     for (inner.items) |*item| {
         item.startNew += pre;
@@ -159,9 +161,9 @@ pub fn diff(allocator: std.mem.Allocator, left: []const u8, right: []const u8, m
 }
 
 // this give the full path of operation
-pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8, max_d: usize) !Script {
-    const N = left.len;
-    const M = right.len;
+pub fn diffRaw(allocator: std.mem.Allocator, old: []const u8, new: []const u8, max_d: usize) !Script {
+    const N = old.len;
+    const M = new.len;
     const MAX = N + M;
 
     const V: Frontier = try allocator.alloc(usize, 2 * MAX + 2);
@@ -190,13 +192,13 @@ pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8
             }
 
             y = x + MAX - k;
-            while (x < N and y < M and left[x] == right[y]) { // snake
+            while (x < N and y < M and old[x] == new[y]) { // snake
                 x += 1;
                 y += 1;
             }
             V[k] = x;
 
-            if (x >= N and y >= M) return try backtrack(allocator, trace.items, d, MAX, left, right);
+            if (x >= N and y >= M) return try backtrack(allocator, trace.items, d, MAX, old, new);
         }
 
         try trace.ensureUnusedCapacity(allocator, d + 1);
@@ -207,10 +209,10 @@ pub fn diffRaw(allocator: std.mem.Allocator, left: []const u8, right: []const u8
     return .empty;
 }
 
-pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: usize, left: []const u8, right: []const u8) !Script {
+pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: usize, old: []const u8, new: []const u8) !Script {
     var script: Script = .empty;
-    var x: usize = left.len;
-    var y: usize = right.len;
+    var x: usize = old.len;
+    var y: usize = new.len;
     var currentOp: Op = .KEEP;
     var counter: usize = 0;
 
@@ -286,28 +288,28 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
     return script;
 }
 
-pub fn applyScript(alloc: std.mem.Allocator, script: []const Edit, left: []const u8, right: []const u8) ![]u8 {
+pub fn applyScript(alloc: std.mem.Allocator, script: []const Edit, old: []const u8, new: []const u8) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(alloc);
-    var i: usize = 0; // cursore su left
-    var j: usize = 0; // cursore su right
+    var i: usize = 0; // cursore su old
+    var j: usize = 0; // cursore su new
     for (script) |step| {
         if (step.startOld != i or step.startNew != j) return error.CursorMismatch;
         for (0..step.len) |_| {
             switch (step.op) {
                 .INSERT => {
-                    if (j >= right.len) return error.CursorOverrun;
-                    try out.append(alloc, right[j]);
+                    if (j >= new.len) return error.CursorOverrun;
+                    try out.append(alloc, new[j]);
                     j += 1;
                 },
                 .DELETE => {
-                    if (i >= left.len) return error.CursorOverrun;
+                    if (i >= old.len) return error.CursorOverrun;
                     i += 1;
                 },
                 .KEEP => {
-                    if (i >= left.len or j >= right.len) return error.CursorOverrun;
-                    if (left[i] != right[j]) return error.KeepMismatch;
-                    try out.append(alloc, left[i]);
+                    if (i >= old.len or j >= new.len) return error.CursorOverrun;
+                    if (old[i] != new[j]) return error.KeepMismatch;
+                    try out.append(alloc, old[i]);
                     i += 1;
                     j += 1;
                 },
@@ -315,6 +317,6 @@ pub fn applyScript(alloc: std.mem.Allocator, script: []const Edit, left: []const
         }
     }
 
-    if (i != left.len or j != right.len) return error.IncompleteScript;
+    if (i != old.len or j != new.len) return error.IncompleteScript;
     return out.toOwnedSlice(alloc);
 }

@@ -33,15 +33,15 @@ fn measure(
     };
 
     { // warmup, non misurato
-        var w = try zdiff.diff(alloc, a, b);
+        var w = try zdiff.diff(alloc, a, b, 6726);
         w.deinit(alloc);
     }
 
     for (0..reps) |_| {
         const t0 = std.Io.Clock.now(.awake, io);
-        const d = (try zdiff.shortestEdit(alloc, a, b)).?;
+        const d = (try zdiff.shortestEdit(alloc, a, b, 6726)).?;
         const t1 = std.Io.Clock.now(.awake, io);
-        var script = try zdiff.diff(alloc, a, b);
+        var script = try zdiff.diff(alloc, a, b, 6726);
         const t2 = std.Io.Clock.now(.awake, io);
         defer script.deinit(alloc);
 
