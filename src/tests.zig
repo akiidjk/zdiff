@@ -3,8 +3,98 @@ const std = @import("std");
 const applyScript = @import("root.zig").applyScript;
 const diff = @import("root.zig").diff;
 const Edit = @import("root.zig").Edit;
+const hunk = @import("hunk.zig");
 const Op = @import("root.zig").Op;
 const shortestEdit = @import("root.zig").shortestEdit;
+
+const ExpectedHunk = struct {
+    old_start: usize,
+    old_len: usize,
+    new_start: usize,
+    new_len: usize,
+    first_run: usize,
+    run_count: usize,
+};
+
+fn expectHunks(
+    script: []const Edit,
+    context: usize,
+    old_size: usize,
+    new_size: usize,
+    expected: []const ExpectedHunk,
+) !void {
+    const alloc = std.testing.allocator;
+    const got = try hunk.hunks(alloc, script, old_size, new_size, context);
+    defer alloc.free(got);
+
+    std.testing.expectEqual(expected.len, got.len) catch |e| {
+        std.debug.print("\nexpectHunks FAIL: attesi {d} hunk, trovati {d}\n", .{ expected.len, got.len });
+        for (got, 0..) |x, i| {
+            std.debug.print("  [{d}] old={d}+{d} new={d}+{d} runs={d}+{d}\n", .{
+                i, x.old_start, x.old_len, x.new_start, x.new_len, x.first_run, x.run_count,
+            });
+        }
+        return e;
+    };
+
+    for (expected, got, 0..) |exp, actual, i| {
+        if (exp.old_start != actual.old_start or
+            exp.old_len != actual.old_len or
+            exp.new_start != actual.new_start or
+            exp.new_len != actual.new_len or
+            exp.first_run != actual.first_run or
+            exp.run_count != actual.run_count)
+        {
+            std.debug.print(
+                "\nexpectHunks FAIL a [{d}]\n  atteso: old={d}+{d} new={d}+{d} runs={d}+{d}\n  trovato: old={d}+{d} new={d}+{d} runs={d}+{d}\n",
+                .{
+                    i,
+                    exp.old_start,
+                    exp.old_len,
+                    exp.new_start,
+                    exp.new_len,
+                    exp.first_run,
+                    exp.run_count,
+                    actual.old_start,
+                    actual.old_len,
+                    actual.new_start,
+                    actual.new_len,
+                    actual.first_run,
+                    actual.run_count,
+                },
+            );
+            return error.HunkMismatch;
+        }
+    }
+}
+
+fn expectHunkInvariants(script: []const Edit, hs: anytype, old_size: usize, new_size: usize) !void {
+    var prev_old_end: usize = 0;
+    var prev_new_end: usize = 0;
+
+    for (hs, 0..) |x, i| {
+        try std.testing.expect(x.old_start <= old_size);
+        try std.testing.expect(x.new_start <= new_size);
+        try std.testing.expect(x.old_len <= old_size - x.old_start);
+        try std.testing.expect(x.new_len <= new_size - x.new_start);
+        try std.testing.expect(x.first_run <= script.len);
+        try std.testing.expect(x.run_count <= script.len - x.first_run);
+        try std.testing.expect(x.run_count > 0);
+
+        var has_change = false;
+        for (script[x.first_run .. x.first_run + x.run_count]) |run| {
+            if (run.op != .KEEP) has_change = true;
+        }
+        try std.testing.expect(has_change);
+
+        if (i > 0) {
+            try std.testing.expect(prev_old_end <= x.old_start);
+            try std.testing.expect(prev_new_end <= x.new_start);
+        }
+        prev_old_end = x.old_start + x.old_len;
+        prev_new_end = x.new_start + x.new_len;
+    }
+}
 
 const ANSI_RESET = "\x1b[0m";
 const ANSI_BOLD = "\x1b[1m";
@@ -291,6 +381,196 @@ fn shrink(a_in: []const u8, b_in: []const u8) !void {
     std.debug.print("  controesempio minimo:\n    a = \"{s}\"  (len {d})\n    b = \"{s}\"  (len {d})\n", .{
         a[0..a_len], a_len, b[0..b_len], b_len,
     });
+}
+
+test "hunks degenerate" {
+    try expectHunks(&.{}, 10, 0, 0, &.{});
+
+    const only_keep = [_]Edit{
+        .{ .op = .KEEP, .startOld = 0, .startNew = 0, .len = 20 },
+    };
+    try expectHunks(&only_keep, 10, 20, 20, &.{});
+}
+
+test "hunks single delete with context" {
+    const script = [_]Edit{
+        .{ .op = .KEEP, .startOld = 0, .startNew = 0, .len = 10 },
+        .{ .op = .DELETE, .startOld = 10, .startNew = 10, .len = 3 },
+        .{ .op = .KEEP, .startOld = 13, .startNew = 10, .len = 17 },
+    };
+
+    try expectHunks(&script, 4, 30, 27, &.{.{
+        .old_start = 6,
+        .old_len = 11,
+        .new_start = 6,
+        .new_len = 8,
+        .first_run = 1,
+        .run_count = 1,
+    }});
+}
+
+test "hunks single insert with context" {
+    const script = [_]Edit{
+        .{ .op = .KEEP, .startOld = 0, .startNew = 0, .len = 10 },
+        .{ .op = .INSERT, .startOld = 10, .startNew = 10, .len = 3 },
+        .{ .op = .KEEP, .startOld = 10, .startNew = 13, .len = 17 },
+    };
+
+    try expectHunks(&script, 4, 27, 30, &.{.{
+        .old_start = 6,
+        .old_len = 8,
+        .new_start = 6,
+        .new_len = 11,
+        .first_run = 1,
+        .run_count = 1,
+    }});
+}
+
+test "hunks clamp context at beginning" {
+    const script = [_]Edit{
+        .{ .op = .DELETE, .startOld = 0, .startNew = 0, .len = 3 },
+        .{ .op = .KEEP, .startOld = 3, .startNew = 0, .len = 27 },
+    };
+
+    try expectHunks(&script, 4, 30, 27, &.{.{
+        .old_start = 0,
+        .old_len = 7,
+        .new_start = 0,
+        .new_len = 4,
+        .first_run = 0,
+        .run_count = 1,
+    }});
+}
+
+test "hunks clamp context at end" {
+    const script = [_]Edit{
+        .{ .op = .KEEP, .startOld = 0, .startNew = 0, .len = 20 },
+        .{ .op = .INSERT, .startOld = 20, .startNew = 20, .len = 3 },
+    };
+
+    try expectHunks(&script, 4, 20, 23, &.{.{
+        .old_start = 16,
+        .old_len = 4,
+        .new_start = 16,
+        .new_len = 7,
+        .first_run = 1,
+        .run_count = 1,
+    }});
+}
+
+test "hunks zero context" {
+    const script = [_]Edit{
+        .{ .op = .KEEP, .startOld = 0, .startNew = 0, .len = 10 },
+        .{ .op = .DELETE, .startOld = 10, .startNew = 10, .len = 2 },
+        .{ .op = .INSERT, .startOld = 12, .startNew = 10, .len = 3 },
+        .{ .op = .KEEP, .startOld = 12, .startNew = 13, .len = 8 },
+        .{ .op = .DELETE, .startOld = 20, .startNew = 21, .len = 1 },
+    };
+
+    try expectHunks(&script, 0, 21, 21, &.{
+        .{
+            .old_start = 10,
+            .old_len = 2,
+            .new_start = 10,
+            .new_len = 3,
+            .first_run = 1,
+            .run_count = 2,
+        },
+        .{
+            .old_start = 20,
+            .old_len = 1,
+            .new_start = 21,
+            .new_len = 0,
+            .first_run = 4,
+            .run_count = 1,
+        },
+    });
+}
+
+test "hunks keep exactly twice context bridges" {
+    const script = [_]Edit{
+        .{ .op = .DELETE, .startOld = 10, .startNew = 10, .len = 2 },
+        .{ .op = .INSERT, .startOld = 12, .startNew = 10, .len = 3 },
+        .{ .op = .KEEP, .startOld = 12, .startNew = 13, .len = 8 },
+        .{ .op = .DELETE, .startOld = 20, .startNew = 21, .len = 1 },
+        .{ .op = .INSERT, .startOld = 21, .startNew = 21, .len = 1 },
+        .{ .op = .KEEP, .startOld = 21, .startNew = 22, .len = 50 },
+    };
+
+    try expectHunks(&script, 4, 100, 101, &.{.{
+        .old_start = 6,
+        .old_len = 19,
+        .new_start = 6,
+        .new_len = 20,
+        .first_run = 0,
+        .run_count = 5,
+    }});
+}
+
+test "hunks keep longer than twice context splits" {
+    const script = [_]Edit{
+        .{ .op = .DELETE, .startOld = 10, .startNew = 10, .len = 2 },
+        .{ .op = .INSERT, .startOld = 12, .startNew = 10, .len = 3 },
+        .{ .op = .KEEP, .startOld = 12, .startNew = 13, .len = 9 },
+        .{ .op = .DELETE, .startOld = 21, .startNew = 22, .len = 1 },
+        .{ .op = .INSERT, .startOld = 22, .startNew = 22, .len = 1 },
+        .{ .op = .KEEP, .startOld = 22, .startNew = 23, .len = 50 },
+    };
+
+    try expectHunks(&script, 4, 100, 101, &.{
+        .{
+            .old_start = 6,
+            .old_len = 10,
+            .new_start = 6,
+            .new_len = 11,
+            .first_run = 0,
+            .run_count = 2,
+        },
+        .{
+            .old_start = 17,
+            .old_len = 9,
+            .new_start = 18,
+            .new_len = 9,
+            .first_run = 3,
+            .run_count = 2,
+        },
+    });
+}
+
+test "hunks multiple small bridges form one group" {
+    const script = [_]Edit{
+        .{ .op = .INSERT, .startOld = 10, .startNew = 10, .len = 2 },
+        .{ .op = .DELETE, .startOld = 10, .startNew = 12, .len = 1 },
+        .{ .op = .KEEP, .startOld = 11, .startNew = 12, .len = 3 },
+        .{ .op = .INSERT, .startOld = 14, .startNew = 15, .len = 1 },
+        .{ .op = .DELETE, .startOld = 14, .startNew = 16, .len = 2 },
+        .{ .op = .KEEP, .startOld = 16, .startNew = 16, .len = 7 },
+        .{ .op = .INSERT, .startOld = 23, .startNew = 23, .len = 2 },
+        .{ .op = .DELETE, .startOld = 23, .startNew = 25, .len = 1 },
+        .{ .op = .KEEP, .startOld = 24, .startNew = 25, .len = 30 },
+    };
+
+    try expectHunks(&script, 4, 100, 101, &.{.{
+        .old_start = 6,
+        .old_len = 22,
+        .new_start = 6,
+        .new_len = 23,
+        .first_run = 0,
+        .run_count = 8,
+    }});
+}
+
+test "hunks end-to-end identical inputs produce no hunks" {
+    const alloc = std.testing.allocator;
+    const text = "nothing changed here";
+
+    var script = try diff(alloc, text, text, 6726);
+    defer script.deinit(alloc);
+
+    const hs = try hunk.hunks(alloc, script.items, text.len, text.len, 8);
+    defer alloc.free(hs);
+
+    try std.testing.expectEqual(@as(usize, 0), hs.len);
 }
 
 test "corpus round-trip" {
