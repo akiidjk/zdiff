@@ -2,6 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 
 pub const hunk = @import("hunk.zig");
+pub const token = @import("token.zig");
+pub const unified = @import("unified.zig");
 
 const Frontier = []usize;
 pub const Op = enum {

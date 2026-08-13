@@ -5,6 +5,8 @@ const applyScript = @import("zdiff").applyScript;
 const diff = @import("zdiff").diff;
 const hunk = @import("zdiff").hunk;
 const roundTrip = @import("zdiff").roundTrip;
+const token = @import("zdiff").token;
+const unified = @import("zdiff").unified;
 
 pub fn main(init: std.process.Init) !void {
     const old =
@@ -20,7 +22,6 @@ pub fn main(init: std.process.Init) !void {
     const new =
         \\The quick brown fox jumps over the lazy dog.
         \\This section should remain completely unchanged.
-        \\The user has permission level: admin.
         \\The user can now access private resources.
         \\Nothing interesting happens in this part of the text.
         \\It is intentionally long enough to separate two changes.
@@ -39,4 +40,16 @@ pub fn main(init: std.process.Init) !void {
     const hunks = try hunk.hunks(init.gpa, script.items, old.len, new.len, 10);
     defer init.gpa.free(hunks);
     std.debug.print("Hunks: {any}\n", .{hunks});
+
+    var internMap: std.StringHashMap(usize) = .init(init.gpa);
+    defer internMap.deinit();
+    const tokens = try token.tokenizeBy(init.gpa, old, '\n', &internMap);
+    defer init.gpa.free(tokens);
+    std.debug.print("OLD Tokens: {any}\n", .{tokens});
+
+    const tokensNew = try token.tokenizeBy(init.gpa, new, '\n', &internMap);
+    defer init.gpa.free(tokensNew);
+    std.debug.print("NEW Tokens: {any}\n", .{tokensNew});
+
+    // unified.view(old, new, script.items, hunks);
 }

@@ -3,7 +3,7 @@ const std = @import("std");
 const Edit = @import("root.zig").Edit;
 const Op = @import("root.zig").Op;
 
-const Hunk = struct {
+pub const Hunk = struct {
     old_start: usize,
     old_len: usize,
     new_start: usize,
