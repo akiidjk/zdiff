@@ -41,8 +41,9 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(hunks);
     std.debug.print("Hunks: {any}\n", .{hunks});
 
-    var internMap: std.StringHashMap(usize) = .init(init.gpa);
-    defer internMap.deinit();
+    // var keys =
+    var internMap: std.array_hash_map.String(usize) = .empty;
+    defer internMap.deinit(init.gpa);
     const tokens = try token.tokenizeBy(init.gpa, old, '\n', &internMap);
     defer init.gpa.free(tokens);
     std.debug.print("OLD Tokens: {any}\n", .{tokens});
