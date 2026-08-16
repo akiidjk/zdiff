@@ -29,28 +29,30 @@ pub fn main(init: std.process.Init) !void {
         \\The server is running on port 9090.
         \\End of configuration.
     ;
-    var script = try diff(init.gpa, old, new, 6500);
+
+    var internMap: std.array_hash_map.String(usize) = .empty;
+    defer internMap.deinit(init.gpa);
+    const oldTokens = try token.tokenizeBy(init.gpa, old, '\n', &internMap);
+    defer init.gpa.free(oldTokens.tokens);
+    defer init.gpa.free(oldTokens.ids);
+    std.debug.print("OLD Tokens: {any}\n", .{oldTokens});
+
+    const newTokens = try token.tokenizeBy(init.gpa, new, '\n', &internMap);
+    defer init.gpa.free(newTokens.tokens);
+    defer init.gpa.free(newTokens.ids);
+    std.debug.print("NEW Tokens: {any}\n", .{newTokens});
+
+    var script = try diff(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
     defer script.deinit(init.gpa);
     std.debug.print("Diff res: {any}\n", .{script.items});
 
-    const result = try applyScript(init.gpa, script.items, old, new);
+    const result = try applyScript(usize, init.gpa, script.items, oldTokens.ids, newTokens.ids);
     defer init.gpa.free(result);
-    std.debug.print("Result scripted: {s}\n", .{result});
+    std.debug.print("Result scripted: {any}\n", .{result});
 
-    const hunks = try hunk.hunks(init.gpa, script.items, old.len, new.len, 10);
+    const hunks = try hunk.hunks(init.gpa, script.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
     defer init.gpa.free(hunks);
     std.debug.print("Hunks: {any}\n", .{hunks});
-
-    // var keys =
-    var internMap: std.array_hash_map.String(usize) = .empty;
-    defer internMap.deinit(init.gpa);
-    const tokens = try token.tokenizeBy(init.gpa, old, '\n', &internMap);
-    defer init.gpa.free(tokens);
-    std.debug.print("OLD Tokens: {any}\n", .{tokens});
-
-    const tokensNew = try token.tokenizeBy(init.gpa, new, '\n', &internMap);
-    defer init.gpa.free(tokensNew);
-    std.debug.print("NEW Tokens: {any}\n", .{tokensNew});
 
     // unified.view(old, new, script.items, hunks);
 }
