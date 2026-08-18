@@ -76,6 +76,10 @@ pub fn hunks(
 
         var hunk = getGroup(script[first_run..], context, first_run);
 
+        const group_first = hunk.first_run;
+        const group_last = group_first + hunk.run_count - 1;
+        const next_group_search = group_last + 1;
+
         const old_group_end = hunk.old_start + hunk.old_len;
         const new_group_end = hunk.new_start + hunk.new_len;
 
@@ -91,9 +95,29 @@ pub fn hunks(
         hunk.new_start = padded_new_start;
         hunk.new_len = padded_new_end - padded_new_start;
 
+        var hunk_first = group_first;
+        var hunk_last = group_last;
+
+        if (context > 0) {
+            if (group_first > 0 and
+                script[hunk_first - 1].op == .KEEP)
+            {
+                hunk_first -= 1;
+            }
+
+            if (hunk_last + 1 < script.len and
+                script[hunk_last + 1].op == .KEEP)
+            {
+                hunk_last += 1;
+            }
+        }
+
+        hunk.first_run = hunk_first;
+        hunk.run_count = hunk_last - hunk_first + 1;
+
         try hunks_list.append(alloc, hunk);
 
-        first_run = hunk.first_run + hunk.run_count;
+        first_run = next_group_search;
     }
 
     return try hunks_list.toOwnedSlice(alloc);

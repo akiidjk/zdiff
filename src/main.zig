@@ -42,15 +42,15 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(newTokens.ids);
     std.debug.print("NEW Tokens: {any}\n", .{newTokens});
 
-    var scriptWToken = try diff(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
-    defer scriptWToken.deinit(init.gpa);
-    std.debug.print("Diff res: {any}\n", .{scriptWToken.items});
+    var scriptWTokens = try diff(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
+    defer scriptWTokens.deinit(init.gpa);
+    std.debug.print("Diff res: {any}\n", .{scriptWTokens.items});
 
-    const resultWToken = try applyScript(usize, init.gpa, scriptWToken.items, oldTokens.ids, newTokens.ids);
+    const resultWToken = try applyScript(usize, init.gpa, scriptWTokens.items, oldTokens.ids, newTokens.ids);
     defer init.gpa.free(resultWToken);
     std.debug.print("Result scripted: {any}\n", .{resultWToken});
 
-    const hunksWTokens = try hunk.hunks(init.gpa, scriptWToken.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
+    const hunksWTokens = try hunk.hunks(init.gpa, scriptWTokens.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
     defer init.gpa.free(hunksWTokens);
     std.debug.print("Hunks: {any}\n", .{hunksWTokens});
 
@@ -68,5 +68,5 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(hunksWBytes);
     std.debug.print("Hunks: {any}\n", .{hunksWBytes});
 
-    // unified.view(old, new, script.items, hunks);
+    try unified.view(token.Token, init.gpa, oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, old, new, unified.renderToken);
 }
