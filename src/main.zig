@@ -42,17 +42,31 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(newTokens.ids);
     std.debug.print("NEW Tokens: {any}\n", .{newTokens});
 
-    var script = try diff(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
-    defer script.deinit(init.gpa);
-    std.debug.print("Diff res: {any}\n", .{script.items});
+    var scriptWToken = try diff(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
+    defer scriptWToken.deinit(init.gpa);
+    std.debug.print("Diff res: {any}\n", .{scriptWToken.items});
 
-    const result = try applyScript(usize, init.gpa, script.items, oldTokens.ids, newTokens.ids);
-    defer init.gpa.free(result);
-    std.debug.print("Result scripted: {any}\n", .{result});
+    const resultWToken = try applyScript(usize, init.gpa, scriptWToken.items, oldTokens.ids, newTokens.ids);
+    defer init.gpa.free(resultWToken);
+    std.debug.print("Result scripted: {any}\n", .{resultWToken});
 
-    const hunks = try hunk.hunks(init.gpa, script.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
-    defer init.gpa.free(hunks);
-    std.debug.print("Hunks: {any}\n", .{hunks});
+    const hunksWTokens = try hunk.hunks(init.gpa, scriptWToken.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
+    defer init.gpa.free(hunksWTokens);
+    std.debug.print("Hunks: {any}\n", .{hunksWTokens});
+
+    std.debug.print("========================= BYTES ============================== \n", .{});
+
+    var scriptWBytes = try diff(u8, init.gpa, old, new, 6500);
+    defer scriptWBytes.deinit(init.gpa);
+    std.debug.print("Diff res: {any}\n", .{scriptWBytes.items});
+
+    const resultWBytes = try applyScript(u8, init.gpa, scriptWBytes.items, old, new);
+    defer init.gpa.free(resultWBytes);
+    std.debug.print("Result scripted: {s}\n", .{resultWBytes});
+
+    const hunksWBytes = try hunk.hunks(init.gpa, scriptWBytes.items, old.len, new.len, 1);
+    defer init.gpa.free(hunksWBytes);
+    std.debug.print("Hunks: {any}\n", .{hunksWBytes});
 
     // unified.view(old, new, script.items, hunks);
 }

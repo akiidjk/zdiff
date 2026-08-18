@@ -73,7 +73,7 @@ inline fn traceAt(trace: []const usize, d: usize, i: usize, MAX: usize) usize {
     return trace[d * (d + 1) / 2 + (i - (MAX - d)) / 2];
 }
 
-pub fn getLenghtCommonprefix(comptime T: type, old: []T, new: []T) usize {
+pub fn getLenghtCommonprefix(comptime T: type, old: []const T, new: []const T) usize {
     var c: usize = 0;
     const len: usize = @min(old.len, new.len);
     for (0..len) |i| {
@@ -86,7 +86,7 @@ pub fn getLenghtCommonprefix(comptime T: type, old: []T, new: []T) usize {
     return c;
 }
 
-pub fn getLenghtCommonsuffix(comptime T: type, old: []T, new: []T) usize {
+pub fn getLenghtCommonsuffix(comptime T: type, old: []const T, new: []const T) usize {
     const len = @min(old.len, new.len);
     var c: usize = 0;
     while (c < len and old[old.len - 1 - c] == new[new.len - 1 - c]) c += 1;
@@ -148,7 +148,7 @@ fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scri
 }
 
 // is diffRaw but trimmed
-pub fn diff(comptime T: type, allocator: std.mem.Allocator, old: []T, new: []T, max_d: usize) !Script {
+pub fn diff(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
     const pre = getLenghtCommonprefix(T, old, new);
     const suf = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
 
@@ -163,7 +163,7 @@ pub fn diff(comptime T: type, allocator: std.mem.Allocator, old: []T, new: []T, 
 }
 
 // this give the full path of operation
-pub fn diffRaw(comptime T: type, allocator: std.mem.Allocator, old: []T, new: []T, max_d: usize) !Script {
+pub fn diffRaw(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
     const N = old.len;
     const M = new.len;
     const MAX = N + M;
@@ -290,7 +290,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
     return script;
 }
 
-pub fn applyScript(comptime T: type, alloc: std.mem.Allocator, script: []const Edit, old: []T, new: []T) ![]T {
+pub fn applyScript(comptime T: type, alloc: std.mem.Allocator, script: []const Edit, old: []const T, new: []const T) ![]T {
     var out: std.ArrayList(T) = .empty;
     errdefer out.deinit(alloc);
     var i: usize = 0; // cursore su old
