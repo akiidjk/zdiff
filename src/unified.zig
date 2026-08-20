@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const diff = @import("root.zig");
+const diff = @import("myers.zig");
 const hunk = @import("hunk.zig");
 const token = @import("token.zig");
 

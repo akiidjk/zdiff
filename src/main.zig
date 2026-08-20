@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const applyScript = @import("zdiff").applyScript;
+const diff = @import("zdiff").diff;
 const hunk = @import("zdiff").hunk;
 const myers = @import("zdiff").myers;
 const roundTrip = @import("zdiff").roundTrip;
@@ -30,45 +31,7 @@ pub fn main(init: std.process.Init) !void {
         \\End of configuration.
     ;
 
-    var internMap: std.array_hash_map.String(usize) = .empty;
-    defer internMap.deinit(init.gpa);
-    const oldTokens = try token.tokenizeBy(init.gpa, old, '\n', &internMap);
-    defer init.gpa.free(oldTokens.tokens);
-    defer init.gpa.free(oldTokens.ids);
-    std.debug.print("OLD Tokens: {any}\n", .{oldTokens});
+    try diff(init.gpa, old, new, false);
 
-    const newTokens = try token.tokenizeBy(init.gpa, new, '\n', &internMap);
-    defer init.gpa.free(newTokens.tokens);
-    defer init.gpa.free(newTokens.ids);
-    std.debug.print("NEW Tokens: {any}\n", .{newTokens});
-
-    var scriptWTokens = try myers(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
-    defer scriptWTokens.deinit(init.gpa);
-    std.debug.print("Diff res: {any}\n", .{scriptWTokens.items});
-
-    const resultWToken = try applyScript(usize, init.gpa, scriptWTokens.items, oldTokens.ids, newTokens.ids);
-    defer init.gpa.free(resultWToken);
-    std.debug.print("Result scripted: {any}\n", .{resultWToken});
-
-    const hunksWTokens = try hunk.hunks(init.gpa, scriptWTokens.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
-    defer init.gpa.free(hunksWTokens);
-    std.debug.print("Hunks: {any}\n", .{hunksWTokens});
-
-    try unified.viewToken(oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, old, new);
-
-    std.debug.print("========================= BYTES ============================== \n", .{});
-
-    var scriptWBytes = try myers(u8, init.gpa, old, new, 6500);
-    defer scriptWBytes.deinit(init.gpa);
-    std.debug.print("Diff res: {any}\n", .{scriptWBytes.items});
-
-    const resultWBytes = try applyScript(u8, init.gpa, scriptWBytes.items, old, new);
-    defer init.gpa.free(resultWBytes);
-    std.debug.print("Result scripted: {s}\n", .{resultWBytes});
-
-    const hunksWBytes = try hunk.hunks(init.gpa, scriptWBytes.items, old.len, new.len, 1);
-    defer init.gpa.free(hunksWBytes);
-    std.debug.print("Hunks: {any}\n", .{hunksWBytes});
-
-    try unified.viewHex(old, new, scriptWBytes.items, hunksWBytes);
+    try diff(init.gpa, old, new, true);
 }
