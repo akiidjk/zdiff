@@ -54,6 +54,8 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(hunksWTokens);
     std.debug.print("Hunks: {any}\n", .{hunksWTokens});
 
+    try unified.viewToken(oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, old, new);
+
     std.debug.print("========================= BYTES ============================== \n", .{});
 
     var scriptWBytes = try diff(u8, init.gpa, old, new, 6500);
@@ -68,5 +70,5 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(hunksWBytes);
     std.debug.print("Hunks: {any}\n", .{hunksWBytes});
 
-    try unified.view(token.Token, init.gpa, oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, old, new, unified.renderToken);
+    try unified.viewHex(old, new, scriptWBytes.items, hunksWBytes);
 }
