@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const applyScript = @import("root.zig").applyScript;
-const diff = @import("root.zig").diff;
+const diff = @import("root.zig").myers;
 const Edit = @import("root.zig").Edit;
 const hunk = @import("hunk.zig");
 const Op = @import("root.zig").Op;

@@ -2,8 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 
 const applyScript = @import("zdiff").applyScript;
-const diff = @import("zdiff").diff;
 const hunk = @import("zdiff").hunk;
+const myers = @import("zdiff").myers;
 const roundTrip = @import("zdiff").roundTrip;
 const token = @import("zdiff").token;
 const unified = @import("zdiff").unified;
@@ -42,7 +42,7 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(newTokens.ids);
     std.debug.print("NEW Tokens: {any}\n", .{newTokens});
 
-    var scriptWTokens = try diff(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
+    var scriptWTokens = try myers(usize, init.gpa, oldTokens.ids, newTokens.ids, 6500);
     defer scriptWTokens.deinit(init.gpa);
     std.debug.print("Diff res: {any}\n", .{scriptWTokens.items});
 
@@ -58,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("========================= BYTES ============================== \n", .{});
 
-    var scriptWBytes = try diff(u8, init.gpa, old, new, 6500);
+    var scriptWBytes = try myers(u8, init.gpa, old, new, 6500);
     defer scriptWBytes.deinit(init.gpa);
     std.debug.print("Diff res: {any}\n", .{scriptWBytes.items});
 

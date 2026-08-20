@@ -41,7 +41,7 @@ fn measure(
     };
 
     { // warmup, non misurato
-        var w = try zdiff.diff(u8, alloc, a, b, 6726);
+        var w = try zdiff.myers(u8, alloc, a, b, 6726);
         w.deinit(alloc);
     }
 
@@ -50,7 +50,7 @@ fn measure(
         const d = (try zdiff.shortestEdit(u8, alloc, a, b, 6726)).?;
         const t1 = std.Io.Clock.now(.awake, io);
 
-        var script = try zdiff.diff(u8, alloc, a, b, 6726);
+        var script = try zdiff.myers(u8, alloc, a, b, 6726);
         defer script.deinit(alloc);
         const t2 = std.Io.Clock.now(.awake, io);
 
@@ -179,7 +179,7 @@ fn benchCorpus(alloc: std.mem.Allocator, io: std.Io, reps: usize, max_bytes: usi
     std.debug.print("== corpus ({d} coppie, {d} saltate) ==\n", .{ L, skipped });
     std.debug.print("  bytes {d} | D medio {d} | D max {d}\n", .{ tot_bytes, tot_d / L, max_d });
     std.debug.print("  tot: shortestEdit {d} ns | diff {d} ns | apply {d} ns | hunks {d} ns | full {d} ns | {d:.1} MB/s\n", .{
-        tot_core,   tot_diff, tot_apply, tot_hunk, tot_full,
+        tot_core,                                                                             tot_diff, tot_apply, tot_hunk, tot_full,
         @as(f64, @floatFromInt(tot_bytes)) / (@as(f64, @floatFromInt(tot_full)) / 1e9) / 1e6,
     });
     std.debug.print("  full per coppia: p50 {d} ns | p90 {d} ns | max {d} ns ({s}, D={d}, len={d})\n", .{
@@ -244,7 +244,7 @@ fn measurePipeline(alloc: std.mem.Allocator, io: std.Io, a: []const u8, b: []con
         const t1 = std.Io.Clock.now(.awake, io);
 
         const max_d = old_t.ids.len + new_t.ids.len;
-        var script = try zdiff.diff(usize, alloc, old_t.ids, new_t.ids, max_d);
+        var script = try zdiff.myers(usize, alloc, old_t.ids, new_t.ids, max_d);
         defer script.deinit(alloc);
 
         const t2 = std.Io.Clock.now(.awake, io);

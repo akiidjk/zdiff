@@ -148,7 +148,7 @@ fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scri
 }
 
 // is diffRaw but trimmed
-pub fn diff(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
+pub fn myers(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
     const pre = getLenghtCommonprefix(T, old, new);
     const suf = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
 
