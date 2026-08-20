@@ -10,8 +10,12 @@ const Sample = struct {
     m: usize,
     d: usize,
     script_len: usize,
-    core_ns: i128,
-    full_ns: i128,
+    hunk_count: usize,
+    core_ns: i128, // shortestEdit
+    diff_ns: i128, // diff (script completo con backtrack)
+    apply_ns: i128, // applyScript
+    hunk_ns: i128, // hunk.hunks
+    full_ns: i128, // diff + applyScript + hunks, la pipeline utile
 };
 
 fn measure(
@@ -28,30 +32,48 @@ fn measure(
         .m = b.len,
         .d = 0,
         .script_len = 0,
+        .hunk_count = 0,
         .core_ns = std.math.maxInt(i64),
+        .diff_ns = std.math.maxInt(i64),
+        .apply_ns = std.math.maxInt(i64),
+        .hunk_ns = std.math.maxInt(i64),
         .full_ns = std.math.maxInt(i64),
     };
 
     { // warmup, non misurato
-        var w = try zdiff.diff(alloc, a, b, 6726);
+        var w = try zdiff.diff(u8, alloc, a, b, 6726);
         w.deinit(alloc);
     }
 
     for (0..reps) |_| {
         const t0 = std.Io.Clock.now(.awake, io);
-        const d = (try zdiff.shortestEdit(alloc, a, b, 6726)).?;
+        const d = (try zdiff.shortestEdit(u8, alloc, a, b, 6726)).?;
         const t1 = std.Io.Clock.now(.awake, io);
-        var script = try zdiff.diff(alloc, a, b, 6726);
-        const t2 = std.Io.Clock.now(.awake, io);
+
+        var script = try zdiff.diff(u8, alloc, a, b, 6726);
         defer script.deinit(alloc);
+        const t2 = std.Io.Clock.now(.awake, io);
+
+        const rebuilt = try zdiff.applyScript(u8, alloc, script.items, a, b);
+        defer alloc.free(rebuilt);
+        const t3 = std.Io.Clock.now(.awake, io);
+
+        const hs = try zdiff.hunk.hunks(alloc, script.items, a.len, b.len, 3);
+        defer alloc.free(hs);
+        const t4 = std.Io.Clock.now(.awake, io);
 
         s.d = d;
         s.script_len = script.items.len;
+        s.hunk_count = hs.len;
         s.core_ns = @min(s.core_ns, t0.durationTo(t1).toNanoseconds());
-        s.full_ns = @min(s.full_ns, t1.durationTo(t2).toNanoseconds());
+        s.diff_ns = @min(s.diff_ns, t1.durationTo(t2).toNanoseconds());
+        s.apply_ns = @min(s.apply_ns, t2.durationTo(t3).toNanoseconds());
+        s.hunk_ns = @min(s.hunk_ns, t3.durationTo(t4).toNanoseconds());
+        s.full_ns = @min(s.full_ns, t1.durationTo(t4).toNanoseconds());
     }
     return s;
 }
+
 fn benchSynthetic(alloc: std.mem.Allocator, io: std.Io, reps: usize) !void {
     var prng = std.Random.DefaultPrng.init(0xC0FFEE);
     const r = prng.random();
@@ -72,8 +94,8 @@ fn benchSynthetic(alloc: std.mem.Allocator, io: std.Io, reps: usize) !void {
             const cells = @as(f64, @floatFromInt(s.d)) * @as(f64, @floatFromInt(s.d)) / 2.0;
             const work = cells + @as(f64, @floatFromInt(s.n));
             std.debug.print(
-                "n={d:>6} D={d:>5} len={d:>6} | core {d:>10} ns | full {d:>10} ns | {d:>6.2} ns/cella\n",
-                .{ n, s.d, s.script_len, s.core_ns, s.full_ns, if (cells > 0) @as(f64, @floatFromInt(s.core_ns)) / work else 0 },
+                "n={d:>6} D={d:>5} len={d:>6} hunks={d:>4} | shortestEdit {d:>9} ns | diff {d:>9} ns | apply {d:>8} ns | hunks {d:>8} ns | full {d:>9} ns | {d:>6.2} ns/cella\n",
+                .{ n, s.d, s.script_len, s.hunk_count, s.core_ns, s.diff_ns, s.apply_ns, s.hunk_ns, s.full_ns, if (cells > 0) @as(f64, @floatFromInt(s.core_ns)) / work else 0 },
             );
         }
         std.debug.print("\n", .{});
@@ -119,12 +141,18 @@ fn benchCorpus(alloc: std.mem.Allocator, io: std.Io, reps: usize, max_bytes: usi
     }
 
     var tot_core: i128 = 0;
+    var tot_diff: i128 = 0;
+    var tot_apply: i128 = 0;
+    var tot_hunk: i128 = 0;
     var tot_full: i128 = 0;
     var tot_bytes: usize = 0;
     var tot_d: usize = 0;
     var max_d: usize = 0;
     for (samples.items) |s| {
         tot_core += s.core_ns;
+        tot_diff += s.diff_ns;
+        tot_apply += s.apply_ns;
+        tot_hunk += s.hunk_ns;
         tot_full += s.full_ns;
         tot_bytes += s.n + s.m;
         tot_d += s.d;
@@ -150,8 +178,8 @@ fn benchCorpus(alloc: std.mem.Allocator, io: std.Io, reps: usize, max_bytes: usi
 
     std.debug.print("== corpus ({d} coppie, {d} saltate) ==\n", .{ L, skipped });
     std.debug.print("  bytes {d} | D medio {d} | D max {d}\n", .{ tot_bytes, tot_d / L, max_d });
-    std.debug.print("  core tot {d} ns | full tot {d} ns | {d:.1} MB/s\n", .{
-        tot_core,                                                                             tot_full,
+    std.debug.print("  tot: shortestEdit {d} ns | diff {d} ns | apply {d} ns | hunks {d} ns | full {d} ns | {d:.1} MB/s\n", .{
+        tot_core,   tot_diff, tot_apply, tot_hunk, tot_full,
         @as(f64, @floatFromInt(tot_bytes)) / (@as(f64, @floatFromInt(tot_full)) / 1e9) / 1e6,
     });
     std.debug.print("  full per coppia: p50 {d} ns | p90 {d} ns | max {d} ns ({s}, D={d}, len={d})\n", .{
@@ -164,10 +192,125 @@ fn benchCorpus(alloc: std.mem.Allocator, io: std.Io, reps: usize, max_bytes: usi
     std.debug.print("\n", .{});
 }
 
+// Genera un blob di testo con newline ogni line_len byte, cosi' tokenizeBy(..., '\n', ...)
+// produce righe di dimensione uniforme senza dover costruire un array di stringhe.
+fn genLinedText(alloc: std.mem.Allocator, r: std.Random, n: usize, line_len: usize) ![]u8 {
+    const buf = try alloc.alloc(u8, n);
+    for (buf, 0..) |*c, i| {
+        c.* = if (i > 0 and i % line_len == 0) '\n' else 'a' + r.uintLessThan(u8, 26);
+    }
+    return buf;
+}
+
+const PipelineSample = struct {
+    tok_ns: i128,
+    diff_ns: i128,
+    apply_ns: i128,
+    hunk_ns: i128,
+    total_ns: i128,
+    script_len: usize,
+    hunk_count: usize,
+};
+
+// Misura la pipeline end-to-end come la usa main.zig: tokenizza old/new riga
+// per riga condividendo l'intern map, diff sugli id, applyScript, poi hunks.
+// max_d viene passato N+M (il tetto teorico di Myers) cosi' anche il caso
+// "tutte le righe diverse" non sbatte contro error.TooDifferent.
+fn measurePipeline(alloc: std.mem.Allocator, io: std.Io, a: []const u8, b: []const u8, reps: usize) !PipelineSample {
+    var s: PipelineSample = .{
+        .tok_ns = std.math.maxInt(i64),
+        .diff_ns = std.math.maxInt(i64),
+        .apply_ns = std.math.maxInt(i64),
+        .hunk_ns = std.math.maxInt(i64),
+        .total_ns = std.math.maxInt(i64),
+        .script_len = 0,
+        .hunk_count = 0,
+    };
+
+    for (0..reps) |_| {
+        const t0 = std.Io.Clock.now(.awake, io);
+
+        var internMap: std.array_hash_map.String(usize) = .empty;
+        defer internMap.deinit(alloc);
+
+        const old_t = try zdiff.token.tokenizeBy(alloc, a, '\n', &internMap);
+        defer alloc.free(old_t.tokens);
+        defer alloc.free(old_t.ids);
+
+        const new_t = try zdiff.token.tokenizeBy(alloc, b, '\n', &internMap);
+        defer alloc.free(new_t.tokens);
+        defer alloc.free(new_t.ids);
+
+        const t1 = std.Io.Clock.now(.awake, io);
+
+        const max_d = old_t.ids.len + new_t.ids.len;
+        var script = try zdiff.diff(usize, alloc, old_t.ids, new_t.ids, max_d);
+        defer script.deinit(alloc);
+
+        const t2 = std.Io.Clock.now(.awake, io);
+
+        const rebuilt = try zdiff.applyScript(usize, alloc, script.items, old_t.ids, new_t.ids);
+        defer alloc.free(rebuilt);
+
+        const t3 = std.Io.Clock.now(.awake, io);
+
+        const hs = try zdiff.hunk.hunks(alloc, script.items, old_t.tokens.len, new_t.tokens.len, 3);
+        defer alloc.free(hs);
+
+        const t4 = std.Io.Clock.now(.awake, io);
+
+        s.tok_ns = @min(s.tok_ns, t0.durationTo(t1).toNanoseconds());
+        s.diff_ns = @min(s.diff_ns, t1.durationTo(t2).toNanoseconds());
+        s.apply_ns = @min(s.apply_ns, t2.durationTo(t3).toNanoseconds());
+        s.hunk_ns = @min(s.hunk_ns, t3.durationTo(t4).toNanoseconds());
+        s.total_ns = @min(s.total_ns, t0.durationTo(t4).toNanoseconds());
+        s.script_len = script.items.len;
+        s.hunk_count = hs.len;
+    }
+
+    return s;
+}
+
+fn printPipelineSample(n: usize, lines: usize, muts: usize, s: PipelineSample) void {
+    std.debug.print(
+        "bytes={d:>7} righe~{d:>6} muts={d:>6} run={d:>5} hunks={d:>4} | tok {d:>9} ns | diff {d:>9} ns | apply {d:>8} ns | hunks {d:>8} ns | total {d:>9} ns\n",
+        .{ n, lines, muts, s.script_len, s.hunk_count, s.tok_ns, s.diff_ns, s.apply_ns, s.hunk_ns, s.total_ns },
+    );
+}
+
+// Sweep sulla dimensione e sulla frazione di righe modificate, fino al caso
+// patologico "tutte le righe cambiate" (muts == lines), per capire dove
+// il costo si sposta da tokenize/intern a Myers su documenti line-based.
+fn benchPipeline(alloc: std.mem.Allocator, io: std.Io, reps: usize) !void {
+    var prng = std.Random.DefaultPrng.init(0xFEEDFACE);
+    const r = prng.random();
+
+    std.debug.print("== pipeline completa (tokenize + diff + applyScript + hunks) ==\n", .{});
+
+    const line_len = 40;
+    for ([_]usize{ 2_000, 20_000, 200_000 }) |n| {
+        const lines = n / line_len;
+
+        const a = try genLinedText(alloc, r, n, line_len);
+        defer alloc.free(a);
+
+        for ([_]usize{ 0, 1, @max(1, lines / 100), @max(1, lines / 10), lines }) |muts| {
+            const b = try alloc.dupe(u8, a);
+            defer alloc.free(b);
+            for (0..muts) |_| b[r.uintLessThan(usize, n)] = 'A' + r.uintLessThan(u8, 26);
+
+            const s = try measurePipeline(alloc, io, a, b, reps);
+            printPipelineSample(n, lines, muts, s);
+        }
+        std.debug.print("\n", .{});
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const alloc = init.gpa;
     std.debug.print("mode: {s}\n\n", .{@tagName(@import("builtin").mode)});
     try benchSynthetic(alloc, io, 7);
     try benchCorpus(alloc, io, 5, 32 * 1024);
+    try benchPipeline(alloc, io, 7);
 }

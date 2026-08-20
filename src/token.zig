@@ -14,7 +14,6 @@ pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8,
     var index: usize = 0;
     var start: usize = 0;
     var id: usize = if (internMap.count() > 0) internMap.values()[internMap.count() - 1] + 1 else 0;
-    std.debug.print("{d} {any} {d}\n", .{ internMap.count(), internMap.values(), id });
 
     var tokens: std.ArrayList(Token) = .empty;
     var ids: std.ArrayList(usize) = .empty;
