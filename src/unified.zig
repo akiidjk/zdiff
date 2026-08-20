@@ -153,7 +153,7 @@ fn printHexRow(
         if (i < bytes.len) {
             printHexByte(bytes[i], op);
         } else {
-            .std.debug.print("   ", .{});
+            std.debug.print("   ", .{});
         }
     }
 

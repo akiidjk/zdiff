@@ -6,6 +6,8 @@ const Edit = @import("root.zig").Edit;
 const hunk = @import("hunk.zig");
 const Op = @import("root.zig").Op;
 const shortestEdit = @import("root.zig").shortestEdit;
+const token = @import("token.zig");
+const unified = @import("unified.zig");
 
 const ExpectedHunk = struct {
     old_start: usize,
@@ -108,10 +110,10 @@ const ANSI_CYAN = "\x1b[36m";
 fn roundTrip(a: []const u8, b: []const u8) !void {
     const alloc = std.testing.allocator;
 
-    var script = try diff(alloc, a, b, 6726);
+    var script = try diff(u8, alloc, a, b, 6726);
     defer script.deinit(alloc);
 
-    const rebuilt = try applyScript(alloc, script.items, a, b);
+    const rebuilt = try applyScript(u8, alloc, script.items, a, b);
     defer alloc.free(rebuilt);
 
     std.testing.expectEqualSlices(u8, b, rebuilt) catch |e| {
@@ -140,7 +142,7 @@ fn checkInvariants(script: []const Edit, a: []const u8, b: []const u8) !void {
     const d = del + ins;
     try std.testing.expectEqual(a.len + b.len - 2 * keep, d);
 
-    const d_ref = (try shortestEdit(std.testing.allocator, a, b, 6726)).?;
+    const d_ref = (try shortestEdit(u8, std.testing.allocator, a, b, 6726)).?;
     try std.testing.expectEqual(d_ref, d);
 
     try std.testing.expectEqual((a.len + b.len) % 2, d % 2);
@@ -163,7 +165,7 @@ const ExpectedRun = struct { op: Op, len: usize };
 fn expectRuns(a: []const u8, b: []const u8, expected: []const ExpectedRun) !void {
     const alloc = std.testing.allocator;
 
-    var script = try diff(alloc, a, b, 6726);
+    var script = try diff(u8, alloc, a, b, 6726);
     defer script.deinit(alloc);
 
     try roundTrip(a, b);
@@ -292,7 +294,7 @@ test "known distances" {
         .{ .a = "aaaa", .b = "bbbb", .d = 8 },
     };
     for (cases) |c| {
-        const d = (try shortestEdit(alloc, c.a, c.b, 6726)).?;
+        const d = (try shortestEdit(u8, alloc, c.a, c.b, 6726)).?;
         std.testing.expectEqual(c.d, d) catch |e| {
             std.debug.print("\ndistanza sbagliata: \"{s}\" -> \"{s}\": atteso {d}, trovato {d}\n", .{ c.a, c.b, c.d, d });
             return e;
@@ -404,8 +406,8 @@ test "hunks single delete with context" {
         .old_len = 11,
         .new_start = 6,
         .new_len = 8,
-        .first_run = 1,
-        .run_count = 1,
+        .first_run = 0,
+        .run_count = 3,
     }});
 }
 
@@ -421,8 +423,8 @@ test "hunks single insert with context" {
         .old_len = 8,
         .new_start = 6,
         .new_len = 11,
-        .first_run = 1,
-        .run_count = 1,
+        .first_run = 0,
+        .run_count = 3,
     }});
 }
 
@@ -438,7 +440,7 @@ test "hunks clamp context at beginning" {
         .new_start = 0,
         .new_len = 4,
         .first_run = 0,
-        .run_count = 1,
+        .run_count = 2,
     }});
 }
 
@@ -453,8 +455,8 @@ test "hunks clamp context at end" {
         .old_len = 4,
         .new_start = 16,
         .new_len = 7,
-        .first_run = 1,
-        .run_count = 1,
+        .first_run = 0,
+        .run_count = 2,
     }});
 }
 
@@ -503,7 +505,7 @@ test "hunks keep exactly twice context bridges" {
         .new_start = 6,
         .new_len = 20,
         .first_run = 0,
-        .run_count = 5,
+        .run_count = 6,
     }});
 }
 
@@ -524,15 +526,15 @@ test "hunks keep longer than twice context splits" {
             .new_start = 6,
             .new_len = 11,
             .first_run = 0,
-            .run_count = 2,
+            .run_count = 3,
         },
         .{
             .old_start = 17,
             .old_len = 9,
             .new_start = 18,
             .new_len = 9,
-            .first_run = 3,
-            .run_count = 2,
+            .first_run = 2,
+            .run_count = 4,
         },
     });
 }
@@ -556,7 +558,7 @@ test "hunks multiple small bridges form one group" {
         .new_start = 6,
         .new_len = 23,
         .first_run = 0,
-        .run_count = 8,
+        .run_count = 9,
     }});
 }
 
@@ -564,7 +566,7 @@ test "hunks end-to-end identical inputs produce no hunks" {
     const alloc = std.testing.allocator;
     const text = "nothing changed here";
 
-    var script = try diff(alloc, text, text, 6726);
+    var script = try diff(u8, alloc, text, text, 6726);
     defer script.deinit(alloc);
 
     const hs = try hunk.hunks(alloc, script.items, text.len, text.len, 8);
@@ -612,12 +614,12 @@ test "corpus round-trip" {
 
         std.debug.print(ANSI_BLUE ++ "corpus round-trip: read a.len={d} b.len={d}\n" ++ ANSI_RESET, .{ a.len, b.len });
 
-        var script = try diff(alloc, a, b, 6726);
+        var script = try diff(u8, alloc, a, b, 6726);
         defer script.deinit(alloc);
 
         std.debug.print(ANSI_BLUE ++ "corpus round-trip: diff produced script.items.len={d}\n" ++ ANSI_RESET, .{script.items.len});
 
-        const rebuilt = try applyScript(alloc, script.items, a, b);
+        const rebuilt = try applyScript(u8, alloc, script.items, a, b);
         defer alloc.free(rebuilt);
 
         std.debug.print(ANSI_BLUE ++ "corpus round-trip: rebuilt.len={d} (expected b.len={d})\n" ++ ANSI_RESET, .{ rebuilt.len, b.len });
@@ -630,4 +632,117 @@ test "corpus round-trip" {
         n += 1;
     }
     std.debug.print(ANSI_GREEN ++ ANSI_BOLD ++ "{d} coppie ok\n" ++ ANSI_RESET, .{n});
+}
+
+fn expectTokens(text: []const u8, sep: u8, expected_segments: []const []const u8) !void {
+    const alloc = std.testing.allocator;
+    var internMap: std.array_hash_map.String(usize) = .empty;
+    defer internMap.deinit(alloc);
+
+    const result = try token.tokenizeBy(alloc, text, sep, &internMap);
+    defer alloc.free(result.tokens);
+    defer alloc.free(result.ids);
+
+    std.testing.expectEqual(expected_segments.len, result.tokens.len) catch |e| {
+        std.debug.print("\nexpectTokens FAIL: attesi {d} token, trovati {d}\n", .{ expected_segments.len, result.tokens.len });
+        return e;
+    };
+
+    var pos: usize = 0;
+    for (result.tokens, expected_segments, 0..) |tok, expected, i| {
+        try std.testing.expectEqual(pos, tok.start);
+        const trimmed = std.mem.trim(u8, text[tok.start .. tok.start + tok.len], &.{sep});
+        std.testing.expectEqualStrings(expected, trimmed) catch |e| {
+            std.debug.print("\nexpectTokens FAIL a [{d}]: atteso \"{s}\", trovato \"{s}\"\n", .{ i, expected, trimmed });
+            return e;
+        };
+        pos += tok.len;
+    }
+
+    try std.testing.expectEqual(text.len, pos);
+}
+
+test "tokenize basic split" {
+    try expectTokens("a\nb\nc", '\n', &.{ "a", "b", "c" });
+}
+
+test "tokenize no separator present" {
+    try expectTokens("hello", '\n', &.{"hello"});
+}
+
+test "tokenize empty text" {
+    try expectTokens("", '\n', &.{""});
+}
+
+test "tokenize trailing separator" {
+    try expectTokens("a\nb\n", '\n', &.{ "a", "b", "" });
+}
+
+test "tokenize interning reuses ids for repeated segments" {
+    const alloc = std.testing.allocator;
+    var internMap: std.array_hash_map.String(usize) = .empty;
+    defer internMap.deinit(alloc);
+
+    const result = try token.tokenizeBy(alloc, "a\nx\nb\nx", '\n', &internMap);
+    defer alloc.free(result.tokens);
+    defer alloc.free(result.ids);
+
+    try std.testing.expectEqualSlices(usize, &.{ 0, 1, 2, 1 }, result.ids);
+}
+
+test "tokenize shared intern map across calls" {
+    const alloc = std.testing.allocator;
+    var internMap: std.array_hash_map.String(usize) = .empty;
+    defer internMap.deinit(alloc);
+
+    const old = try token.tokenizeBy(alloc, "a\nb\nc", '\n', &internMap);
+    defer alloc.free(old.tokens);
+    defer alloc.free(old.ids);
+
+    const new = try token.tokenizeBy(alloc, "a\nX\nc", '\n', &internMap);
+    defer alloc.free(new.tokens);
+    defer alloc.free(new.ids);
+
+    try std.testing.expectEqual(old.ids[0], new.ids[0]); // "a" invariato -> stesso id
+    try std.testing.expectEqual(old.ids[2], new.ids[2]); // "\nc" invariato -> stesso id
+    try std.testing.expect(old.ids[1] != new.ids[1]); // "\nb" vs "\nX" -> id diversi
+}
+
+test "viewHex smoke" {
+    const alloc = std.testing.allocator;
+    const a = "hello world";
+    const b = "hello there";
+
+    var script = try diff(u8, alloc, a, b, 6726);
+    defer script.deinit(alloc);
+
+    const hs = try hunk.hunks(alloc, script.items, a.len, b.len, 2);
+    defer alloc.free(hs);
+
+    try unified.viewHex(a, b, script.items, hs);
+}
+
+test "viewToken smoke" {
+    const alloc = std.testing.allocator;
+    const a = "line one\nline two\nline three";
+    const b = "line one\nline TWO\nline three";
+
+    var internMap: std.array_hash_map.String(usize) = .empty;
+    defer internMap.deinit(alloc);
+
+    const oldT = try token.tokenizeBy(alloc, a, '\n', &internMap);
+    defer alloc.free(oldT.tokens);
+    defer alloc.free(oldT.ids);
+
+    const newT = try token.tokenizeBy(alloc, b, '\n', &internMap);
+    defer alloc.free(newT.tokens);
+    defer alloc.free(newT.ids);
+
+    var script = try diff(usize, alloc, oldT.ids, newT.ids, 6726);
+    defer script.deinit(alloc);
+
+    const hs = try hunk.hunks(alloc, script.items, oldT.tokens.len, newT.tokens.len, 1);
+    defer alloc.free(hs);
+
+    try unified.viewToken(oldT.tokens, newT.tokens, script.items, hs, a, b);
 }

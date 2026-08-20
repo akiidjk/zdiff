@@ -45,6 +45,15 @@ pub fn build(b: *std.Build) void {
 
     const run_exe_tests = b.addRunArtifact(exe_tests);
 
+    const tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/tests.zig"),
+        .target = target,
+    });
+    const suite_tests = b.addTest(.{
+        .root_module = tests_mod,
+    });
+    const run_suite_tests = b.addRunArtifact(suite_tests);
+
     const bench = b.addExecutable(.{
         .name = "bench",
         .root_module = b.createModule(.{
@@ -59,4 +68,5 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+    test_step.dependOn(&run_suite_tests.step);
 }
