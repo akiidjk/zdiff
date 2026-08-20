@@ -20,10 +20,10 @@ pub const Edit = struct {
 const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
 
-pub fn shortestEdit(allocator: std.mem.Allocator, old: []const u8, new: []const u8, max_d: usize) !?usize {
-    const pre = getLenghtCommonprefix(old, new);
-    const suf = getLenghtCommonsuffix(old[pre..], new[pre..]);
-    return try shortestEditRaw(allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
+pub fn shortestEdit(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !?usize {
+    const pre = getLenghtCommonprefix(T, old, new);
+    const suf = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+    return try shortestEditRaw(T, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
 }
 
 // This give only the number of operation and nothing else
