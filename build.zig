@@ -9,15 +9,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    const cli_dep = b.dependency("cli", .{});
+
     const exe = b.addExecutable(.{
         .name = "zdiff",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zdiff", .module = mod },
-            },
+            .imports = &.{ .{ .name = "zdiff", .module = mod }, .{ .name = "cli", .module = cli_dep.module("cli") } },
         }),
     });
 

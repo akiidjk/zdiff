@@ -1,37 +1,77 @@
 const std = @import("std");
 const Io = std.Io;
 
-const applyScript = @import("zdiff").applyScript;
+const cli = @import("cli");
 const diff = @import("zdiff").diff;
-const hunk = @import("zdiff").hunk;
-const myers = @import("zdiff").myers;
-const roundTrip = @import("zdiff").roundTrip;
-const token = @import("zdiff").token;
-const unified = @import("zdiff").unified;
+
+var io: std.Io = undefined;
+
+var config = struct {
+    old: []const u8 = undefined,
+    new: []const u8 = undefined,
+}{};
+
+fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    if (std.Io.Dir.cwd().openFile(io, path, .{
+        .mode = .read_only,
+        .lock = .exclusive,
+    })) |file| {
+        defer file.close(io);
+
+        const buf = try allocator.alloc(u8, try file.length(io));
+        var reader = file.reader(io, buf);
+        reader.interface.readSliceAll(buf) catch |err| switch (err) {
+            error.ReadFailed => return reader.err.?,
+            else => return err,
+        };
+        return buf;
+    } else |err| {
+        return err;
+    }
+}
+
+fn run() !void {
+    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    try diff(alloc, try readFile(alloc, config.old), try readFile(alloc, config.new), false);
+}
+
+fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {
+    // Since we call r.getAction in this function, all r.alloc* invocation are unnecessary.
+    // We can directly pass slices of commands, options, and positional arguments,
+    // like `.options = &.{....}`
+    const app = cli.App{
+        .option_envvar_prefix = "ZDIFF_",
+        .command = cli.Command{
+            .name = "zdiff",
+            .description = cli.Description{
+                .one_line = "Zig replacemente for diff command",
+            },
+            .target = cli.CommandTarget{ .action = cli.CommandAction{
+                .positional_args = .{
+                    .required = &.{
+                        cli.PositionalArg{ .name = "Old", .help = "The old file", .value_ref = r.mkRef(&config.old) },
+                        cli.PositionalArg{ .name = "New", .help = "The new file", .value_ref = r.mkRef(&config.new) },
+                    },
+                },
+                .exec = run,
+            } },
+            .options = try r.allocOptions(&.{}),
+        },
+        .version = "0.1.0",
+        .author = "akiidjk & contributors",
+    };
+
+    return r.getAction(&app);
+}
 
 pub fn main(init: std.process.Init) !void {
-    const old =
-        \\The quick brown fox jumps over the lazy dog.
-        \\This section should remain completely unchanged.
-        \\The user has permission level: guest.
-        \\Nothing interesting happens in this part of the text.
-        \\It is intentionally long enough to separate two changes.
-        \\Another unchanged sentence is placed right here.
-        \\The server is running on port 8080.
-        \\End of configuration.
-    ;
-    const new =
-        \\The quick brown fox jumps over the lazy dog.
-        \\This section should remain completely unchanged.
-        \\The user can now access private resources.
-        \\Nothing interesting happens in this part of the text.
-        \\It is intentionally long enough to separate two changes.
-        \\Another unchanged sentence is placed right here.
-        \\The server is running on port 9090.
-        \\End of configuration.
-    ;
+    io = init.io;
+    var r = cli.AppRunner.init(&init);
+    defer r.deinit();
 
-    try diff(init.gpa, old, new, false);
-
-    try diff(init.gpa, old, new, true);
+    const action = try parseArgs(&r);
+    return action();
 }
