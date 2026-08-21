@@ -13,6 +13,7 @@ inline fn renderToken(raw_text: []const u8, tok: token.Token) []const u8 {
 }
 
 pub fn viewToken(
+    io: std.Io,
     old: []token.Token,
     new: []token.Token,
     script: []const diff.Edit,
@@ -20,8 +21,13 @@ pub fn viewToken(
     raw_old: []const u8,
     raw_new: []const u8,
 ) !void {
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+    const stdout_is_tty = try std.Io.File.stdout().isTty(io);
+
     for (hunks) |hu| {
-        std.debug.print(
+        try stdout.print(
             "@@ -{d},{d} +{d},{d} @@\n",
             .{
                 hu.old_start + 1,
@@ -42,7 +48,7 @@ pub fn viewToken(
 
                     if (start < end) {
                         for (old[start..end]) |item| {
-                            std.debug.print(" {s}\n", .{renderToken(raw_old, item)});
+                            try stdout.print(" {s}\n", .{renderToken(raw_old, item)});
                         }
                     }
                 },
@@ -52,7 +58,7 @@ pub fn viewToken(
 
                     if (start < end) {
                         for (old[start..end]) |item| {
-                            std.debug.print("{s}-{s}{s}\n", .{ ANSI_RED, renderToken(raw_old, item), ANSI_RESET });
+                            try stdout.print("{s}-{s}{s}\n", .{ ANSI_RED, renderToken(raw_old, item), ANSI_RESET });
                         }
                     }
                 },
@@ -61,13 +67,15 @@ pub fn viewToken(
                     const end = @min(edit.startNew + edit.len, new_hunk_end);
                     if (start < end) {
                         for (new[start..end]) |item| {
-                            std.debug.print("{s}+{s}{s}\n", .{ ANSI_GREEN, renderToken(raw_new, item), ANSI_RESET });
+                            try stdout.print("{s}+{s}{s}\n", .{ ANSI_GREEN, renderToken(raw_new, item), ANSI_RESET });
                         }
                     }
                 },
             }
         }
+        if (stdout_is_tty) try stdout.flush(); // flush each hunk
     }
+    try stdout.flush();
 }
 
 const BYTES_PER_ROW: usize = 16;
@@ -76,21 +84,21 @@ inline fn printable(byte: u8) u8 {
     return if (std.ascii.isPrint(byte)) byte else '.';
 }
 
-fn printHexByte(byte: u8, op: diff.Op) void {
+fn printHexByte(stdout: *std.Io.Writer, byte: u8, op: diff.Op) !void {
     switch (op) {
         .KEEP => {
-            std.debug.print("{x:0>2} ", .{byte});
+            try stdout.print("{x:0>2} ", .{byte});
         },
 
         .DELETE => {
-            std.debug.print(
+            try stdout.print(
                 "{s}{x:0>2}{s} ",
                 .{ ANSI_RED, byte, ANSI_RESET },
             );
         },
 
         .INSERT => {
-            std.debug.print(
+            try stdout.print(
                 "{s}{x:0>2}{s} ",
                 .{ ANSI_GREEN, byte, ANSI_RESET },
             );
@@ -98,23 +106,23 @@ fn printHexByte(byte: u8, op: diff.Op) void {
     }
 }
 
-fn printAsciiByte(byte: u8, op: diff.Op) void {
+fn printAsciiByte(stdout: *std.Io.Writer, byte: u8, op: diff.Op) !void {
     const c = printable(byte);
 
     switch (op) {
         .KEEP => {
-            std.debug.print("{c}", .{c});
+            try stdout.print("{c}", .{c});
         },
 
         .DELETE => {
-            std.debug.print(
+            try stdout.print(
                 "{s}{c}{s}",
                 .{ ANSI_RED, c, ANSI_RESET },
             );
         },
 
         .INSERT => {
-            std.debug.print(
+            try stdout.print(
                 "{s}{c}{s}",
                 .{ ANSI_GREEN, c, ANSI_RESET },
             );
@@ -122,14 +130,14 @@ fn printAsciiByte(byte: u8, op: diff.Op) void {
     }
 }
 
-fn printPrefix(op: diff.Op) void {
+fn printPrefix(stdout: *std.Io.Writer, op: diff.Op) !void {
     switch (op) {
-        .KEEP => std.debug.print("  ", .{}),
-        .DELETE => std.debug.print("{s}- {s}", .{
+        .KEEP => try stdout.print("  ", .{}),
+        .DELETE => try stdout.print("{s}- {s}", .{
             ANSI_RED,
             ANSI_RESET,
         }),
-        .INSERT => std.debug.print("{s}+ {s}", .{
+        .INSERT => try stdout.print("{s}+ {s}", .{
             ANSI_GREEN,
             ANSI_RESET,
         }),
@@ -137,44 +145,46 @@ fn printPrefix(op: diff.Op) void {
 }
 
 fn printHexRow(
+    stdout: *std.Io.Writer,
     bytes: []const u8,
     offset: usize,
     op: diff.Op,
-) void {
-    printPrefix(op);
+) !void {
+    try printPrefix(stdout, op);
 
-    std.debug.print("{x:0>8}  ", .{offset});
+    try stdout.print("{x:0>8}  ", .{offset});
 
     for (0..BYTES_PER_ROW) |i| {
         if (i == 8) {
-            std.debug.print(" ", .{});
+            try stdout.print(" ", .{});
         }
 
         if (i < bytes.len) {
-            printHexByte(bytes[i], op);
+            try printHexByte(stdout, bytes[i], op);
         } else {
-            std.debug.print("   ", .{});
+            try stdout.print("   ", .{});
         }
     }
 
-    std.debug.print(" |", .{});
+    try stdout.print(" |", .{});
 
     for (bytes) |byte| {
-        printAsciiByte(byte, op);
+        try printAsciiByte(stdout, byte, op);
     }
 
     for (bytes.len..BYTES_PER_ROW) |_| {
-        std.debug.print(" ", .{});
+        try stdout.print(" ", .{});
     }
 
-    std.debug.print("|\n", .{});
+    try stdout.print("|\n", .{});
 }
 
 fn dumpRange(
+    stdout: *std.Io.Writer,
     bytes: []const u8,
     absolute_start: usize,
     op: diff.Op,
-) void {
+) !void {
     var pos: usize = 0;
 
     while (pos < bytes.len) {
@@ -183,7 +193,8 @@ fn dumpRange(
 
         const row = bytes[pos .. pos + row_len];
 
-        printHexRow(
+        try printHexRow(
+            stdout,
             row,
             absolute_start + pos,
             op,
@@ -194,13 +205,19 @@ fn dumpRange(
 }
 
 pub fn viewHex(
+    io: std.Io,
     old: []const u8,
     new: []const u8,
     script: []const diff.Edit,
     hunks: []const hunk.Hunk,
 ) !void {
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+    const stdout_is_tty = try std.Io.File.stdout().isTty(io);
+
     for (hunks) |hu| {
-        std.debug.print(
+        try stdout.print(
             "\n@@ -{d},{d} +{d},{d} @@\n",
             .{
                 hu.old_start + 1,
@@ -230,7 +247,8 @@ pub fn viewHex(
                     );
 
                     if (start < end) {
-                        dumpRange(
+                        try dumpRange(
+                            stdout,
                             old[start..end],
                             start,
                             .KEEP,
@@ -250,7 +268,8 @@ pub fn viewHex(
                     );
 
                     if (start < end) {
-                        dumpRange(
+                        try dumpRange(
+                            stdout,
                             old[start..end],
                             start,
                             .DELETE,
@@ -270,7 +289,8 @@ pub fn viewHex(
                     );
 
                     if (start < end) {
-                        dumpRange(
+                        try dumpRange(
+                            stdout,
                             new[start..end],
                             start,
                             .INSERT,
@@ -279,5 +299,9 @@ pub fn viewHex(
                 },
             }
         }
+
+        if (stdout_is_tty) try stdout.flush();
     }
+
+    try stdout.flush();
 }

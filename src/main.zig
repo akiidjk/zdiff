@@ -35,7 +35,7 @@ fn run() !void {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    try diff(alloc, try readFile(alloc, config.old), try readFile(alloc, config.new), false);
+    try diff(io, alloc, try readFile(alloc, config.old), try readFile(alloc, config.new), false);
 }
 
 fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {

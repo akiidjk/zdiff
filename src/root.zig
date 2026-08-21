@@ -37,13 +37,13 @@ pub fn applyScript(comptime T: type, alloc: std.mem.Allocator, script: []const m
     return out.toOwnedSlice(alloc);
 }
 
-pub fn diff(alloc: std.mem.Allocator, old: []const u8, new: []const u8, raw: bool) !void {
+pub fn diff(io: std.Io, alloc: std.mem.Allocator, old: []const u8, new: []const u8, raw: bool) !void {
     if (raw) {
         var scriptWBytes = try myers.myers(u8, alloc, old, new, 6500);
         defer scriptWBytes.deinit(alloc);
         const hunksWBytes = try hunk.hunks(alloc, scriptWBytes.items, old.len, new.len, 1);
         defer alloc.free(hunksWBytes);
-        try unified.viewHex(old, new, scriptWBytes.items, hunksWBytes);
+        try unified.viewHex(io, old, new, scriptWBytes.items, hunksWBytes);
     } else {
         var internMap: std.array_hash_map.String(usize) = .empty;
         defer internMap.deinit(alloc);
@@ -61,6 +61,6 @@ pub fn diff(alloc: std.mem.Allocator, old: []const u8, new: []const u8, raw: boo
         const hunksWTokens = try hunk.hunks(alloc, scriptWTokens.items, oldTokens.tokens.len, newTokens.tokens.len, 1);
         defer alloc.free(hunksWTokens);
 
-        try unified.viewToken(oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, old, new);
+        try unified.viewToken(io, oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, old, new);
     }
 }
