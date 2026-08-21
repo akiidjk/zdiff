@@ -3,3 +3,6 @@ zig-out/
 *.o
 zig-pkg/
 corpus
+benchmark-results/
+.venv/
+__pycache__/

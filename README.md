@@ -117,6 +117,33 @@ Generate a corpus from any local git repo's history:
 scripts/generator.sh /path/to/some/repo corpus 300
 ```
 
+Compare the release CLI with GNU `diff` using `hyperfine`:
+
+```sh
+scripts/benchmark.sh
+```
+
+This covers large files with few changes, completely different files within
+`zdiff`'s edit-distance limit, scattered edits, long common prefixes and
+suffixes, and 200 small-file invocations. Output rendering goes to
+`/dev/null`; each case is exported as JSON under `benchmark-results/`.
+
+Set `BENCH_SIZE_MB` (10 to 100), `BENCH_RUNS`, `BENCH_WARMUP`, or
+`BENCH_RESULTS` to override the defaults.
+
+Create the Python environment and plot the latest run:
+
+```sh
+uv sync
+uv run python scripts/plot_benchmarks.py
+```
+
+Pass a result directory or `--output FILE` to select another run or output
+path. Each case gets its own scale and shows mean runtime with standard
+deviation. The second column shows the peak memory reported by `hyperfine`.
+GNU memory runs in a separate `hyperfine` process because version 1.20 retains
+the first command's peak for later commands. Lower is better.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
