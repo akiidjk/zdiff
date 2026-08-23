@@ -10,7 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-LABELS = ("zdiff", "GNU diff")
+LABELS = ("zdiff", "GNU diff", "GNU diff --minimal")
 CASES = {
     "large-few-changes": (0, "Large files, few changes"),
     "completely-different": (1, "Completely different files"),
@@ -32,17 +32,18 @@ def result_dir(path: Path) -> Path:
 def load(path: Path) -> list[tuple[str, dict[str, dict[str, list[float]]]]]:
     cases = []
     files = sorted(
-        (file for file in path.glob("*.json") if not file.stem.endswith("-memory")),
+        (file for file in path.glob("*.json") if not file.stem.endswith(("-memory", "-minimal-memory"))),
         key=lambda file: CASES.get(file.stem, (len(CASES),))[0],
     )
     for file in files:
         raw = json.loads(file.read_text())
         results = {item["command"]: item for item in raw.get("results", [])}
-        memory_file = file.with_name(f"{file.stem}-memory.json")
-        if memory_file.exists():
-            memory_results = json.loads(memory_file.read_text()).get("results", [])
-            if len(memory_results) == 1 and memory_results[0].get("command") == "GNU diff":
-                results["GNU diff"]["memory_usage_byte"] = memory_results[0].get("memory_usage_byte")
+        for label, suffix in (("GNU diff", "memory"), ("GNU diff --minimal", "minimal-memory")):
+            memory_file = file.with_name(f"{file.stem}-{suffix}.json")
+            if memory_file.exists():
+                memory_results = json.loads(memory_file.read_text()).get("results", [])
+                if len(memory_results) == 1 and memory_results[0].get("command") == label:
+                    results[label]["memory_usage_byte"] = memory_results[0].get("memory_usage_byte")
         if set(results) != set(LABELS) or any(
             not result.get(metric) or min(result[metric]) <= 0
             for result in results.values()
@@ -56,23 +57,23 @@ def load(path: Path) -> list[tuple[str, dict[str, dict[str, list[float]]]]]:
 
 
 def plot(cases: list[tuple[str, dict[str, dict[str, list[float]]]]], output: Path) -> None:
-    colors = ("#2563eb", "#dc2626")
-    fig, grid = plt.subplots(len(cases), 2, figsize=(14, len(cases) * 2), squeeze=False, layout="constrained")
+    colors = ("#2563eb", "#dc2626", "#f59e0b")
+    fig, grid = plt.subplots(len(cases), 2, figsize=(14, len(cases) * 2.4), squeeze=False, layout="constrained")
     fig.suptitle("zdiff vs GNU diff", fontsize=16)
 
     for (time_axis, memory_axis), (name, results) in zip(grid, cases, strict=True):
         times = [mean(results[label]["times"]) * 1000 for label in LABELS]
         time_errors = [stdev(results[label]["times"]) * 1000 if len(results[label]["times"]) > 1 else 0 for label in LABELS]
-        combined_error = 2 * sum(
-            error**2 / len(results[label]["times"])
-            for error, label in zip(time_errors, LABELS, strict=True)
+        first, second = sorted(range(len(times)), key=times.__getitem__)[:2]
+        combined_error = 2 * (
+            time_errors[first] ** 2 / len(results[LABELS[first]]["times"])
+            + time_errors[second] ** 2 / len(results[LABELS[second]]["times"])
         ) ** 0.5
-        if abs(times[0] - times[1]) <= combined_error:
-            verdict = "No clear winner"
-        elif times[0] < times[1]:
-            verdict = f"zdiff {times[1] / times[0]:.2f}x faster"
-        else:
-            verdict = f"GNU diff {times[0] / times[1]:.2f}x faster"
+        verdict = (
+            f"No clear winner: {LABELS[first]} / {LABELS[second]}"
+            if times[second] - times[first] <= combined_error
+            else f"Fastest: {LABELS[first]}"
+        )
 
         for axis, values, errors, unit, title in (
             (time_axis, times, time_errors, "ms", f"{name}  |  {verdict}"),

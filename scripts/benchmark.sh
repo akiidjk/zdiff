@@ -19,7 +19,7 @@ command -v diff >/dev/null || { echo "error: GNU diff is required" >&2; exit 1; 
 }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/zdiff-bench.XXXXXX")"
-trap 'rm -rf "$tmp"' EXIT
+# trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$RESULTS" "$tmp/small"
 
 zig build --build-file "$ROOT/build.zig" -Doptimize=ReleaseFast --prefix "$ROOT/zig-out"
@@ -44,17 +44,21 @@ for i in $(seq 1 200); do
 done
 
 run_case() {
-    local name="$1" old="$2" new="$3" old_q new_q zdiff_q gnu_cmd
+    local name="$1" old="$2" new="$3" old_q new_q zdiff_q gnu_cmd minimal_cmd
     printf -v old_q '%q' "$old"
     printf -v new_q '%q' "$new"
     printf -v zdiff_q '%q' "$ZDIFF"
     gnu_cmd="diff -U 1 --color=always $old_q $new_q >/dev/null; status=\$?; [[ \$status -le 1 ]]"
+    minimal_cmd="diff --minimal -U 1 --color=always $old_q $new_q >/dev/null; status=\$?; [[ \$status -le 1 ]]"
     hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
         --export-json "$RESULTS/$name.json" \
         -n zdiff "$zdiff_q $old_q $new_q >/dev/null" \
-        -n 'GNU diff' "$gnu_cmd"
+        -n 'GNU diff' "$gnu_cmd" \
+        -n 'GNU diff --minimal' "$minimal_cmd"
     hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
         --export-json "$RESULTS/$name-memory.json" -n 'GNU diff' "$gnu_cmd"
+    hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
+        --export-json "$RESULTS/$name-minimal-memory.json" -n 'GNU diff --minimal' "$minimal_cmd"
 }
 
 run_case large-few-changes "$tmp/large.a" "$tmp/large.b"
@@ -67,9 +71,13 @@ printf -v zdiff_q '%q' "$ZDIFF"
 hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
     --export-json "$RESULTS/many-small-files.json" \
     -n zdiff "for old in $small_q/*.a; do $zdiff_q \"\$old\" \"\${old%.a}.b\" >/dev/null || exit; done" \
-    -n 'GNU diff' "for old in $small_q/*.a; do diff -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
+    -n 'GNU diff' "for old in $small_q/*.a; do diff -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done" \
+    -n 'GNU diff --minimal' "for old in $small_q/*.a; do diff --minimal -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
 hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
     --export-json "$RESULTS/many-small-files-memory.json" \
     -n 'GNU diff' "for old in $small_q/*.a; do diff -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
+hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
+    --export-json "$RESULTS/many-small-files-minimal-memory.json" \
+    -n 'GNU diff --minimal' "for old in $small_q/*.a; do diff --minimal -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
 
 printf 'Results: %s\n' "$RESULTS"
