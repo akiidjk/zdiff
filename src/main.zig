@@ -1,5 +1,6 @@
 const std = @import("std");
 const Io = std.Io;
+const builtin = @import("builtin");
 
 const cli = @import("cli");
 const diff = @import("zdiff").diff;
@@ -35,7 +36,16 @@ fn run() !void {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    try diff(io, alloc, try readFile(alloc, config.old), try readFile(alloc, config.new), false);
+    const read_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);
+    const old = try readFile(alloc, config.old);
+    const new = try readFile(alloc, config.new);
+
+    if (builtin.mode == .Debug) {
+        const read_end = std.Io.Clock.now(.awake, io);
+        std.debug.print("[timing] read={d} ns\n", .{read_start.durationTo(read_end).toNanoseconds()});
+    }
+
+    try diff(io, alloc, old, new, false);
 }
 
 fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {

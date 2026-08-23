@@ -21,6 +21,19 @@ pub fn viewToken(
     raw_old: []const u8,
     raw_new: []const u8,
 ) !void {
+    return viewTokenOffset(io, old, new, script, hunks, raw_old, raw_new, 0);
+}
+
+pub fn viewTokenOffset(
+    io: std.Io,
+    old: []token.Token,
+    new: []token.Token,
+    script: []const diff.Edit,
+    hunks: []const hunk.Hunk,
+    raw_old: []const u8,
+    raw_new: []const u8,
+    line_offset: usize,
+) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
@@ -30,9 +43,9 @@ pub fn viewToken(
         try stdout.print(
             "@@ -{d},{d} +{d},{d} @@\n",
             .{
-                hu.old_start + 1,
+                hu.old_start + line_offset + 1,
                 hu.old_len,
-                hu.new_start + 1,
+                hu.new_start + line_offset + 1,
                 hu.new_len,
             },
         );

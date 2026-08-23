@@ -10,6 +10,94 @@ pub const Tokenized = struct {
     ids: []usize,
 };
 
+pub const CommonTrim = struct {
+    old: []const u8,
+    new: []const u8,
+    line_offset: usize,
+};
+
+fn commonPrefix(old: []const u8, new: []const u8) usize {
+    const len = @min(old.len, new.len);
+    var i: usize = 0;
+    while (i < len and old[i] == new[i]) i += 1;
+    return i;
+}
+
+fn commonSuffix(old: []const u8, new: []const u8, prefix: usize) usize {
+    const len = @min(old.len, new.len) - prefix;
+    var i: usize = 0;
+    while (i < len and old[old.len - 1 - i] == new[new.len - 1 - i]) i += 1;
+    return i;
+}
+
+fn prefixStart(text: []const u8, prefix: usize, separator: u8, context: usize) usize {
+    var start = if (std.mem.lastIndexOfScalar(u8, text[0..prefix], separator)) |i| i + 1 else 0;
+    for (0..context) |_| {
+        if (start == 0) break;
+        start = if (std.mem.lastIndexOfScalar(u8, text[0 .. start - 1], separator)) |i| i + 1 else 0;
+    }
+    return start;
+}
+
+fn suffixEnd(text: []const u8, suffix: usize, separator: u8, context: usize) usize {
+    if (suffix == 0) return text.len;
+    const suffix_start = text.len - suffix;
+    var end = std.mem.indexOfScalarPos(u8, text, suffix_start, separator) orelse return text.len;
+    for (0..context) |_| {
+        end = std.mem.indexOfScalarPos(u8, text, end + 1, separator) orelse return text.len;
+    }
+    return end;
+}
+
+fn trimCommonImpl(comptime debug: bool, io: if (debug) std.Io else void, old: []const u8, new: []const u8, separator: u8, context: usize) CommonTrim {
+    const prefix = blk: {
+        if (debug) {
+            const start = std.Io.Clock.now(.awake, io);
+            const value = commonPrefix(old, new);
+            const end = std.Io.Clock.now(.awake, io);
+            std.debug.print("[timing] prefix={d} ns\n", .{start.durationTo(end).toNanoseconds()});
+            break :blk value;
+        }
+        break :blk commonPrefix(old, new);
+    };
+    const suffix = blk: {
+        if (debug) {
+            const start = std.Io.Clock.now(.awake, io);
+            const value = commonSuffix(old, new, prefix);
+            const end = std.Io.Clock.now(.awake, io);
+            std.debug.print("[timing] suffix={d} ns\n", .{start.durationTo(end).toNanoseconds()});
+            break :blk value;
+        }
+        break :blk commonSuffix(old, new, prefix);
+    };
+
+    const start = prefixStart(old, prefix, separator, context);
+    var line_offset: usize = 0;
+    for (old[0..start]) |byte| if (byte == separator) {
+        line_offset += 1;
+    };
+    return .{
+        .old = old[start..@max(start, suffixEnd(old, suffix, separator, context))],
+        .new = new[start..@max(start, suffixEnd(new, suffix, separator, context))],
+        .line_offset = line_offset,
+    };
+}
+
+pub fn trimCommon(old: []const u8, new: []const u8, separator: u8, context: usize) CommonTrim {
+    return trimCommonImpl(false, {}, old, new, separator, context);
+}
+
+pub fn trimCommonDebug(io: std.Io, old: []const u8, new: []const u8, separator: u8, context: usize) CommonTrim {
+    return trimCommonImpl(true, io, old, new, separator, context);
+}
+
+test "trim common complete lines and retain context" {
+    const trimmed = trimCommon("a\nb\nold\nc\nd\n", "a\nb\nnew\nc\nd\n", '\n', 1);
+    try std.testing.expectEqualStrings("b\nold\nc", trimmed.old);
+    try std.testing.expectEqualStrings("b\nnew\nc", trimmed.new);
+    try std.testing.expectEqual(1, trimmed.line_offset);
+}
+
 pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8, internMap: *std.array_hash_map.String(usize)) !Tokenized {
     var index: usize = 0;
     var start: usize = 0;

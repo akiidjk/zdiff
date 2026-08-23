@@ -143,12 +143,40 @@ fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scri
     return fixedInner;
 }
 
-// is diffRaw but trimmed
-pub fn myers(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
-    const pre = getLenghtCommonprefix(T, old, new);
-    const suf = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+fn runDiffRaw(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
+    if (!debug) return diffRaw(T, allocator, old, new, max_d);
 
-    var inner = try diffRaw(T, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
+    const start = std.Io.Clock.now(.awake, io);
+    const result = try diffRaw(T, allocator, old, new, max_d);
+    const end = std.Io.Clock.now(.awake, io);
+    std.debug.print("[timing] diffRaw={d} ns\n", .{start.durationTo(end).toNanoseconds()});
+    return result;
+}
+
+fn myersImpl(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
+    const pre = blk: {
+        if (debug) {
+            const start = std.Io.Clock.now(.awake, io);
+            const value = getLenghtCommonprefix(T, old, new);
+            const end = std.Io.Clock.now(.awake, io);
+            std.debug.print("[timing] prefix={d} ns\n", .{start.durationTo(end).toNanoseconds()});
+            break :blk value;
+        }
+        break :blk getLenghtCommonprefix(T, old, new);
+    };
+    const suf = blk: {
+        if (debug) {
+            const start = std.Io.Clock.now(.awake, io);
+            const value = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+            const end = std.Io.Clock.now(.awake, io);
+            std.debug.print("[timing] suffix={d} ns\n", .{start.durationTo(end).toNanoseconds()});
+            break :blk value;
+        }
+        break :blk getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+    };
+
+    var inner = try runDiffRaw(T, debug, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d, io);
+
     defer inner.deinit(allocator);
     for (inner.items) |*item| {
         item.startNew += pre;
@@ -156,6 +184,19 @@ pub fn myers(comptime T: type, allocator: std.mem.Allocator, old: []const T, new
     }
 
     return try addRun(allocator, pre, suf, inner);
+}
+
+// is diffRaw but trimmed
+pub fn myers(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
+    return myersImpl(T, false, allocator, old, new, max_d, {});
+}
+
+pub fn myersDebug(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: std.Io) !Script {
+    return myersImpl(T, true, allocator, old, new, max_d, io);
+}
+
+pub fn diffRawDebug(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: std.Io) !Script {
+    return runDiffRaw(T, true, allocator, old, new, max_d, io);
 }
 
 // this give the full path of operation
