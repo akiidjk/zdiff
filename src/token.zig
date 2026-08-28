@@ -43,7 +43,9 @@ fn suffixEnd(text: []const u8, suffix: usize, separator: u8, context: usize) usi
     if (suffix == 0) return text.len;
     const suffix_start = text.len - suffix;
     var end = std.mem.indexOfScalarPos(u8, text, suffix_start, separator) orelse return text.len;
-    for (0..context) |_| {
+    const included_common_line = suffix_start == 0 or text[suffix_start - 1] == separator;
+    const remaining = context -| @intFromBool(included_common_line);
+    for (0..remaining) |_| {
         end = std.mem.indexOfScalarPos(u8, text, end + 1, separator) orelse return text.len;
     }
     return end;
@@ -98,6 +100,12 @@ test "trim common complete lines and retain context" {
     try std.testing.expectEqual(1, trimmed.line_offset);
 }
 
+test "trim common keeps exactly one suffix context line" {
+    const trimmed = trimCommon("head\nbefore\nremove\nafter\ntail\n", "head\nbefore\nafter\ntail\n", '\n', 1);
+    try std.testing.expectEqualStrings("before\nremove\nafter", trimmed.old);
+    try std.testing.expectEqualStrings("before\nafter", trimmed.new);
+}
+
 pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8, internMap: *std.array_hash_map.String(usize)) !Tokenized {
     var index: usize = 0;
     var start: usize = 0;
@@ -130,33 +138,34 @@ pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8,
                 try ids.append(allocator, value orelse id);
             }
 
-            start = index;
+            start = index + 1;
         }
     }
 
-    const key = text[start..index];
-    const value = internMap.get(key);
-
-    if (value == null) {
-        try internMap.put(allocator, key, id);
-
-        try tokens.append(allocator, .{
-            .len = index - start,
-            .start = start,
-        });
-        try ids.append(allocator, id);
-
-        id += 1;
-    } else {
-        try tokens.append(allocator, .{
-            .len = index - start,
-            .start = start,
-        });
-        try ids.append(allocator, value orelse id);
+    if (start < index) {
+        const key = text[start..index];
+        const value = internMap.get(key);
+        if (value) |existing| {
+            try tokens.append(allocator, .{ .len = index - start, .start = start });
+            try ids.append(allocator, existing);
+        } else {
+            try internMap.put(allocator, key, id);
+            try tokens.append(allocator, .{ .len = index - start, .start = start });
+            try ids.append(allocator, id);
+        }
     }
 
     return .{
         .ids = try ids.toOwnedSlice(allocator),
         .tokens = try tokens.toOwnedSlice(allocator),
     };
+}
+
+test "tokenizeBy does not invent a line after trailing separator" {
+    var intern: std.array_hash_map.String(usize) = .empty;
+    defer intern.deinit(std.testing.allocator);
+    const result = try tokenizeBy(std.testing.allocator, "one\ntwo\n", '\n', &intern);
+    defer std.testing.allocator.free(result.tokens);
+    defer std.testing.allocator.free(result.ids);
+    try std.testing.expectEqual(2, result.tokens.len);
 }
