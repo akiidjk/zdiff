@@ -14,22 +14,7 @@ var config = struct {
 }{};
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
-    if (std.Io.Dir.cwd().openFile(io, path, .{
-        .mode = .read_only,
-        .lock = .exclusive,
-    })) |file| {
-        defer file.close(io);
-
-        const buf = try allocator.alloc(u8, try file.length(io));
-        var reader = file.reader(io, buf);
-        reader.interface.readSliceAll(buf) catch |err| switch (err) {
-            error.ReadFailed => return reader.err.?,
-            else => return err,
-        };
-        return buf;
-    } else |err| {
-        return err;
-    }
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
 }
 
 fn run() !void {
