@@ -10,6 +10,7 @@ var io: std.Io = undefined;
 var config = struct {
     old: []const u8 = undefined,
     new: []const u8 = undefined,
+    binary: bool = false,
 }{};
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
@@ -45,7 +46,7 @@ fn run() !void {
         std.debug.print("[timing] read={d} ns\n", .{read_start.durationTo(read_end).toNanoseconds()});
     }
 
-    try diff(io, alloc, old, new, false);
+    try diff(io, alloc, old, new, config.binary);
 }
 
 fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {
@@ -68,7 +69,16 @@ fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {
                 },
                 .exec = run,
             } },
-            .options = try r.allocOptions(&.{}),
+            .options = try r.allocOptions(&.{
+                .{
+                    .long_name = "binary",
+                    .help = "Options for do the diff in binary format (hex)",
+                    .short_alias = 'x',
+                    .value_ref = r.mkRef(&config.binary),
+                    .required = false,
+                    .value_name = "BINARY",
+                },
+            }),
         },
         .version = "0.1.0",
         .author = "akiidjk & contributors",
