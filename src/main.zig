@@ -72,7 +72,7 @@ fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {
             .options = try r.allocOptions(&.{
                 .{
                     .long_name = "binary",
-                    .help = "Options for do the diff in binary format (hex)",
+                    .help = "compute the byte-by-byte diff between the files",
                     .short_alias = 'x',
                     .value_ref = r.mkRef(&config.binary),
                     .required = false,
