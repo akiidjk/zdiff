@@ -17,8 +17,8 @@ const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
 
 pub fn shortestEdit(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !?usize {
-    const pre = getLenghtCommonprefix(T, old, new);
-    const suf = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+    const pre = getLengthCommonPrefix(T, old, new);
+    const suf = getLengthCommonSuffix(T, old[pre..], new[pre..]);
     return try shortestEditRaw(T, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
 }
 
@@ -69,23 +69,81 @@ inline fn traceAt(trace: []const usize, d: usize, i: usize, MAX: usize) usize {
     return trace[d * (d + 1) / 2 + (i - (MAX - d)) / 2];
 }
 
-pub fn getLenghtCommonprefix(comptime T: type, old: []const T, new: []const T) usize {
-    var c: usize = 0;
-    const len: usize = @min(old.len, new.len);
-    for (0..len) |i| {
-        if (old[i] == new[i]) {
-            c += 1;
-        } else {
-            return c;
+pub fn getLengthCommonPrefix(comptime T: type, old: []const T, new: []const T) usize {
+    const len = @min(old.len, new.len);
+
+    const VecLen = 32;
+    const Vec = @Vector(VecLen, T);
+
+    var i: usize = 0;
+
+    while (i + VecLen <= len) : (i += VecLen) {
+        const a: Vec = old[i..][0..VecLen].*;
+        const b: Vec = new[i..][0..VecLen].*;
+
+        const eq = a == b;
+
+        if (!@reduce(.And, eq)) {
+            var j: usize = 0;
+            while (j < VecLen) : (j += 1) {
+                if (old[i + j] != new[i + j])
+                    return i + j;
+            }
+
+            unreachable;
         }
     }
-    return c;
+
+    while (i < len) : (i += 1) {
+        if (old[i] != new[i])
+            return i;
+    }
+
+    return len;
 }
 
-pub fn getLenghtCommonsuffix(comptime T: type, old: []const T, new: []const T) usize {
+pub fn getLengthCommonSuffix(comptime T: type, old: []const T, new: []const T) usize {
     const len = @min(old.len, new.len);
+
+    const VecLen = 32;
+    const Vec = @Vector(VecLen, T);
+
     var c: usize = 0;
-    while (c < len and old[old.len - 1 - c] == new[new.len - 1 - c]) c += 1;
+
+    while (c + VecLen <= len) {
+        const old_start = old.len - c - VecLen;
+        const new_start = new.len - c - VecLen;
+
+        const a: Vec = old[old_start..][0..VecLen].*;
+        const b: Vec = new[new_start..][0..VecLen].*;
+
+        const eq = a == b;
+
+        if (!@reduce(.And, eq)) {
+            var j: usize = 0;
+
+            while (j < VecLen) : (j += 1) {
+                const offset = j + 1;
+
+                if (old[old.len - c - offset] !=
+                    new[new.len - c - offset])
+                {
+                    return c + j;
+                }
+            }
+
+            unreachable;
+        }
+
+        c += VecLen;
+    }
+
+    while (c < len and
+        old[old.len - 1 - c] == new[new.len - 1 - c])
+    {
+        c += 1;
+    }
+
     return c;
 }
 
@@ -157,22 +215,22 @@ fn myersImpl(comptime T: type, comptime debug: bool, allocator: std.mem.Allocato
     const pre = blk: {
         if (debug) {
             const start = std.Io.Clock.now(.awake, io);
-            const value = getLenghtCommonprefix(T, old, new);
+            const value = getLengthCommonPrefix(T, old, new);
             const end = std.Io.Clock.now(.awake, io);
             std.debug.print("[timing] prefix={d} ns\n", .{start.durationTo(end).toNanoseconds()});
             break :blk value;
         }
-        break :blk getLenghtCommonprefix(T, old, new);
+        break :blk getLengthCommonPrefix(T, old, new);
     };
     const suf = blk: {
         if (debug) {
             const start = std.Io.Clock.now(.awake, io);
-            const value = getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+            const value = getLengthCommonSuffix(T, old[pre..], new[pre..]);
             const end = std.Io.Clock.now(.awake, io);
             std.debug.print("[timing] suffix={d} ns\n", .{start.durationTo(end).toNanoseconds()});
             break :blk value;
         }
-        break :blk getLenghtCommonsuffix(T, old[pre..], new[pre..]);
+        break :blk getLengthCommonSuffix(T, old[pre..], new[pre..]);
     };
 
     var inner = try runDiffRaw(T, debug, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d, io);
