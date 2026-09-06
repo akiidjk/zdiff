@@ -34,7 +34,7 @@ pub fn viewTokenOffset(
     raw_new: []const u8,
     line_offset: usize,
 ) !void {
-    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_buffer: [1024 * 32]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     const stdout_is_tty = try std.Io.File.stdout().isTty(io);
