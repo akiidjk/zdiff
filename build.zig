@@ -18,6 +18,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{ .{ .name = "zdiff", .module = mod }, .{ .name = "cli", .module = cli_dep.module("cli") } },
+            .link_libc = true,
         }),
     });
 

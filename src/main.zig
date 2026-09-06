@@ -18,7 +18,7 @@ fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
 }
 
 fn run() !void {
-    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    var arena: std.heap.ArenaAllocator = .init(std.heap.c_allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
 
