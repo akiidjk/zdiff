@@ -18,9 +18,7 @@ fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
 }
 
 fn run() !void {
-    var arena: std.heap.ArenaAllocator = .init(std.heap.c_allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
+    const alloc = std.heap.c_allocator;
 
     const read_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);
     const old = try readFile(alloc, config.old);
