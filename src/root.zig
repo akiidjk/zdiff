@@ -85,7 +85,7 @@ pub fn diffToken(
     var scriptWTokens = if (builtin.mode == .Debug)
         try myers.diffRawDebug(u32, alloc, oldTokens.ids, newTokens.ids, 6500, io)
     else
-        try myers.diffRaw(usize, alloc, oldTokens.ids, newTokens.ids, 6500);
+        try myers.diffRaw(u32, alloc, oldTokens.ids, newTokens.ids, 6500);
     defer scriptWTokens.deinit(alloc);
 
     const hunks_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);
