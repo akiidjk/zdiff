@@ -4,8 +4,8 @@ const applyScript = @import("root.zig").applyScript;
 const diff = @import("myers.zig").myers;
 const Edit = @import("myers.zig").Edit;
 const hunk = @import("hunk.zig");
-const Op = @import("root.zig").Op;
-const shortestEdit = @import("root.zig").shortestEdit;
+const Op = @import("myers.zig").Op;
+const shortestEdit = @import("myers.zig").shortestEdit;
 const token = @import("token.zig");
 const unified = @import("unified.zig");
 
@@ -651,12 +651,13 @@ fn expectTokens(text: []const u8, sep: u8, expected_segments: []const []const u8
     var pos: usize = 0;
     for (result.tokens, expected_segments, 0..) |tok, expected, i| {
         try std.testing.expectEqual(pos, tok.start);
-        const trimmed = std.mem.trim(u8, text[tok.start .. tok.start + tok.len], &.{sep});
-        std.testing.expectEqualStrings(expected, trimmed) catch |e| {
-            std.debug.print("\nexpectTokens FAIL a [{d}]: atteso \"{s}\", trovato \"{s}\"\n", .{ i, expected, trimmed });
+        const segment = text[tok.start .. tok.start + tok.len];
+        std.testing.expectEqualStrings(expected, segment) catch |e| {
+            std.debug.print("\nexpectTokens FAIL a [{d}]: atteso \"{s}\", trovato \"{s}\"\n", .{ i, expected, segment });
             return e;
         };
-        pos += tok.len;
+        pos = tok.start + tok.len;
+        if (pos < text.len and text[pos] == sep) pos += 1;
     }
 
     try std.testing.expectEqual(text.len, pos);
@@ -671,11 +672,11 @@ test "tokenize no separator present" {
 }
 
 test "tokenize empty text" {
-    try expectTokens("", '\n', &.{""});
+    try expectTokens("", '\n', &.{});
 }
 
 test "tokenize trailing separator" {
-    try expectTokens("a\nb\n", '\n', &.{ "a", "b", "" });
+    try expectTokens("a\nb\n", '\n', &.{ "a", "b" });
 }
 
 test "tokenize interning reuses ids for repeated segments" {
@@ -709,6 +710,7 @@ test "tokenize shared intern map across calls" {
 }
 
 test "viewHex smoke" {
+    const io = std.testing.io;
     const alloc = std.testing.allocator;
     const a = "hello world";
     const b = "hello there";
@@ -719,10 +721,11 @@ test "viewHex smoke" {
     const hs = try hunk.hunks(alloc, script.items, a.len, b.len, 2);
     defer alloc.free(hs);
 
-    try unified.viewHex(a, b, script.items, hs);
+    try unified.viewHex(io, a, b, script.items, hs);
 }
 
 test "viewToken smoke" {
+    const io = std.testing.io;
     const alloc = std.testing.allocator;
     const a = "line one\nline two\nline three";
     const b = "line one\nline TWO\nline three";
@@ -744,5 +747,5 @@ test "viewToken smoke" {
     const hs = try hunk.hunks(alloc, script.items, oldT.tokens.len, newT.tokens.len, 1);
     defer alloc.free(hs);
 
-    try unified.viewToken(oldT.tokens, newT.tokens, script.items, hs, a, b);
+    try unified.viewToken(io, oldT.tokens, newT.tokens, script.items, hs, a, b);
 }
