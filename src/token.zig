@@ -16,6 +16,24 @@ pub const CommonTrim = struct {
     line_offset: usize,
 };
 
+fn estimateLineCount(text: []const u8, separator: u8) usize {
+    if (text.len == 0) return 0;
+
+    const sample_len = @min(text.len, 64 * 1024);
+    const separator_count = std.mem.count(u8, text[0..sample_len], &.{separator});
+
+    if (separator_count == 0) {
+        if (sample_len == text.len)
+            return 1; // exact value
+
+        return 16; // sample, fallback
+    }
+
+    const estimate = text.len * (separator_count / sample_len) + 1;
+
+    return estimate + estimate / 8; // + 12.5%
+}
+
 fn commonPrefix(old: []const u8, new: []const u8) usize {
     const len = @min(old.len, new.len);
     var i: usize = 0;
@@ -113,6 +131,10 @@ pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8,
 
     var tokens: std.ArrayList(Token) = .empty;
     var ids: std.ArrayList(u32) = .empty;
+
+    const estimatedLine = estimateLineCount(text, separator);
+    try tokens.ensureTotalCapacity(allocator, estimatedLine);
+    try ids.ensureTotalCapacity(allocator, estimatedLine);
 
     while (index < text.len) : (index += 1) {
         if (text[index] == separator) {
