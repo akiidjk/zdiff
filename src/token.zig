@@ -22,12 +22,11 @@ fn estimateLineCount(text: []const u8, separator: u8) usize {
     const sample_len = @min(text.len, 64 * 1024);
     const separator_count = std.mem.count(u8, text[0..sample_len], &.{separator});
 
-    if (separator_count == 0) {
-        if (sample_len == text.len)
-            return 1; // exact value
+    if (sample_len == text.len)
+        return separator_count + 1; // we know exact line count
 
-        return 16; // sample, fallback
-    }
+    if (separator_count == 0)
+        return 16; // fallback we don't know the correct value
 
     const estimate = text.len * (separator_count / sample_len) + 1;
 
