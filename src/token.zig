@@ -7,7 +7,7 @@ pub const Token = struct {
 
 pub const Tokenized = struct {
     tokens: []Token,
-    ids: []usize,
+    ids: []u32,
 };
 
 pub const CommonTrim = struct {
@@ -106,13 +106,13 @@ test "trim common keeps exactly one suffix context line" {
     try std.testing.expectEqualStrings("before\nafter", trimmed.new);
 }
 
-pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8, internMap: *std.array_hash_map.String(usize)) !Tokenized {
+pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8, internMap: *std.array_hash_map.String(u32)) !Tokenized {
     var index: usize = 0;
     var start: usize = 0;
-    var id: usize = if (internMap.count() > 0) internMap.values()[internMap.count() - 1] + 1 else 0;
+    var id: u32 = if (internMap.count() > 0) internMap.values()[internMap.count() - 1] + 1 else 0;
 
     var tokens: std.ArrayList(Token) = .empty;
-    var ids: std.ArrayList(usize) = .empty;
+    var ids: std.ArrayList(u32) = .empty;
 
     while (index < text.len) : (index += 1) {
         if (text[index] == separator) {

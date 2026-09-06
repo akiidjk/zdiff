@@ -255,7 +255,7 @@ pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: us
     var currentOp: Op = .KEEP;
     var counter: usize = 0;
 
-    try script.ensureTotalCapacity(allocator, (MAX - d) / 2 + d);
+    try script.ensureTotalCapacity(allocator, 2 * d + MAX);
 
     var k: usize = 0;
     var D: usize = d;

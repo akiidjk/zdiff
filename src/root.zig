@@ -61,7 +61,7 @@ pub fn diffToken(
     new: []const u8,
 ) !void {
     const context = 1;
-    var internMap: std.array_hash_map.String(usize) = .empty;
+    var internMap: std.array_hash_map.String(u32) = .empty;
     defer internMap.deinit(alloc);
 
     const trimmed = if (builtin.mode == .Debug)
@@ -83,7 +83,7 @@ pub fn diffToken(
     }
 
     var scriptWTokens = if (builtin.mode == .Debug)
-        try myers.diffRawDebug(usize, alloc, oldTokens.ids, newTokens.ids, 6500, io)
+        try myers.diffRawDebug(u32, alloc, oldTokens.ids, newTokens.ids, 6500, io)
     else
         try myers.diffRaw(usize, alloc, oldTokens.ids, newTokens.ids, 6500);
     defer scriptWTokens.deinit(alloc);
