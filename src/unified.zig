@@ -61,7 +61,9 @@ pub fn viewTokenOffset(
 
                     if (start < end) {
                         for (old[start..end]) |item| {
-                            try stdout.print(" {s}\n", .{renderToken(raw_old, item)});
+                            try stdout.writeByte(' ');
+                            try stdout.writeAll(renderToken(raw_old, item));
+                            try stdout.writeByte('\n');
                         }
                     }
                 },
@@ -71,7 +73,11 @@ pub fn viewTokenOffset(
 
                     if (start < end) {
                         for (old[start..end]) |item| {
-                            try stdout.print("{s}-{s}{s}\n", .{ ANSI_RED, renderToken(raw_old, item), ANSI_RESET });
+                            try stdout.writeAll(ANSI_RED);
+                            try stdout.writeByte('-');
+                            try stdout.writeAll(renderToken(raw_old, item));
+                            try stdout.writeAll(ANSI_RESET);
+                            try stdout.writeByte('\n');
                         }
                     }
                 },
@@ -80,7 +86,11 @@ pub fn viewTokenOffset(
                     const end = @min(edit.startNew + edit.len, new_hunk_end);
                     if (start < end) {
                         for (new[start..end]) |item| {
-                            try stdout.print("{s}+{s}{s}\n", .{ ANSI_GREEN, renderToken(raw_new, item), ANSI_RESET });
+                            try stdout.writeAll(ANSI_GREEN);
+                            try stdout.writeByte('+');
+                            try stdout.writeAll(renderToken(raw_new, item));
+                            try stdout.writeAll(ANSI_RESET);
+                            try stdout.writeByte('\n');
                         }
                     }
                 },
@@ -104,17 +114,15 @@ fn printHexByte(stdout: *std.Io.Writer, byte: u8, op: diff.Op) !void {
         },
 
         .DELETE => {
-            try stdout.print(
-                "{s}{x:0>2}{s} ",
-                .{ ANSI_RED, byte, ANSI_RESET },
-            );
+            try stdout.writeAll(ANSI_RED);
+            try stdout.print("{x:0>2} ", .{byte});
+            try stdout.writeAll(ANSI_RESET);
         },
 
         .INSERT => {
-            try stdout.print(
-                "{s}{x:0>2}{s} ",
-                .{ ANSI_GREEN, byte, ANSI_RESET },
-            );
+            try stdout.writeAll(ANSI_GREEN);
+            try stdout.print("{x:0>2} ", .{byte});
+            try stdout.writeAll(ANSI_RESET);
         },
     }
 }
@@ -124,36 +132,36 @@ fn printAsciiByte(stdout: *std.Io.Writer, byte: u8, op: diff.Op) !void {
 
     switch (op) {
         .KEEP => {
-            try stdout.print("{c}", .{c});
+            try stdout.writeByte(c);
         },
 
         .DELETE => {
-            try stdout.print(
-                "{s}{c}{s}",
-                .{ ANSI_RED, c, ANSI_RESET },
-            );
+            try stdout.writeAll(ANSI_RED);
+            try stdout.writeByte(c);
+            try stdout.writeAll(ANSI_RESET);
         },
 
         .INSERT => {
-            try stdout.print(
-                "{s}{c}{s}",
-                .{ ANSI_GREEN, c, ANSI_RESET },
-            );
+            try stdout.writeAll(ANSI_GREEN);
+            try stdout.writeByte(c);
+            try stdout.writeAll(ANSI_RESET);
         },
     }
 }
 
 fn printPrefix(stdout: *std.Io.Writer, op: diff.Op) !void {
     switch (op) {
-        .KEEP => try stdout.print("  ", .{}),
-        .DELETE => try stdout.print("{s}- {s}", .{
-            ANSI_RED,
-            ANSI_RESET,
-        }),
-        .INSERT => try stdout.print("{s}+ {s}", .{
-            ANSI_GREEN,
-            ANSI_RESET,
-        }),
+        .KEEP => try stdout.writeAll(" "),
+        .DELETE => {
+            try stdout.writeAll(ANSI_RED);
+            try stdout.writeAll("- ");
+            try stdout.writeAll(ANSI_RED);
+        },
+        .INSERT => {
+            try stdout.writeAll(ANSI_GREEN);
+            try stdout.writeAll("+ ");
+            try stdout.writeAll(ANSI_RED);
+        },
     }
 }
 
@@ -169,27 +177,27 @@ fn printHexRow(
 
     for (0..BYTES_PER_ROW) |i| {
         if (i == 8) {
-            try stdout.print(" ", .{});
+            try stdout.writeAll(" ");
         }
 
         if (i < bytes.len) {
             try printHexByte(stdout, bytes[i], op);
         } else {
-            try stdout.print("   ", .{});
+            try stdout.writeAll("    ");
         }
     }
 
-    try stdout.print(" |", .{});
+    try stdout.writeAll(" |");
 
     for (bytes) |byte| {
         try printAsciiByte(stdout, byte, op);
     }
 
     for (bytes.len..BYTES_PER_ROW) |_| {
-        try stdout.print(" ", .{});
+        try stdout.writeAll(" ");
     }
 
-    try stdout.print("|\n", .{});
+    try stdout.writeAll("|\n");
 }
 
 fn dumpRange(
