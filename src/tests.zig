@@ -636,7 +636,7 @@ test "corpus round-trip" {
 
 fn expectTokens(text: []const u8, sep: u8, expected_segments: []const []const u8) !void {
     const alloc = std.testing.allocator;
-    var internMap: std.array_hash_map.String(usize) = .empty;
+    var internMap: std.array_hash_map.String(u32) = .empty;
     defer internMap.deinit(alloc);
 
     const result = try token.tokenizeBy(alloc, text, sep, &internMap);
@@ -681,19 +681,19 @@ test "tokenize trailing separator" {
 
 test "tokenize interning reuses ids for repeated segments" {
     const alloc = std.testing.allocator;
-    var internMap: std.array_hash_map.String(usize) = .empty;
+    var internMap: std.array_hash_map.String(u32) = .empty;
     defer internMap.deinit(alloc);
 
     const result = try token.tokenizeBy(alloc, "a\nx\nb\nx", '\n', &internMap);
     defer alloc.free(result.tokens);
     defer alloc.free(result.ids);
 
-    try std.testing.expectEqualSlices(usize, &.{ 0, 1, 2, 1 }, result.ids);
+    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 2, 1 }, result.ids);
 }
 
 test "tokenize shared intern map across calls" {
     const alloc = std.testing.allocator;
-    var internMap: std.array_hash_map.String(usize) = .empty;
+    var internMap: std.array_hash_map.String(u32) = .empty;
     defer internMap.deinit(alloc);
 
     const old = try token.tokenizeBy(alloc, "a\nb\nc", '\n', &internMap);
@@ -730,7 +730,7 @@ test "viewToken smoke" {
     const a = "line one\nline two\nline three";
     const b = "line one\nline TWO\nline three";
 
-    var internMap: std.array_hash_map.String(usize) = .empty;
+    var internMap: std.array_hash_map.String(u32) = .empty;
     defer internMap.deinit(alloc);
 
     const oldT = try token.tokenizeBy(alloc, a, '\n', &internMap);
@@ -741,7 +741,7 @@ test "viewToken smoke" {
     defer alloc.free(newT.tokens);
     defer alloc.free(newT.ids);
 
-    var script = try diff(usize, alloc, oldT.ids, newT.ids, 6726);
+    var script = try diff(u32, alloc, oldT.ids, newT.ids, 6726);
     defer script.deinit(alloc);
 
     const hs = try hunk.hunks(alloc, script.items, oldT.tokens.len, newT.tokens.len, 1);
