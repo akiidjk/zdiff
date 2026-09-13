@@ -183,7 +183,7 @@ pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8,
 }
 
 test "tokenizeBy does not invent a line after trailing separator" {
-    var intern: std.array_hash_map.String(usize) = .empty;
+    var intern: std.array_hash_map.String(u32) = .empty;
     defer intern.deinit(std.testing.allocator);
     const result = try tokenizeBy(std.testing.allocator, "one\ntwo\n", '\n', &intern);
     defer std.testing.allocator.free(result.tokens);

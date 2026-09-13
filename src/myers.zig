@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const Frontier = []usize;
+
 pub const Op = enum {
     KEEP,
     INSERT,
@@ -13,16 +14,20 @@ pub const Edit = struct {
     startOld: usize,
     len: usize,
 };
+
 const Script = std.ArrayList(Edit);
 const Trace = std.ArrayList(usize);
 
+// ============================== ShortestEdit ==================================
+
+// This get the shortestEdit path with standard implementation and trimmed input
 pub fn shortestEdit(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !?usize {
     const pre = getLengthCommonPrefix(T, old, new);
     const suf = getLengthCommonSuffix(T, old[pre..], new[pre..]);
     return try shortestEditRaw(T, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
 }
 
-// This give only the number of operation and nothing else
+// This give only the number of operation and nothing else without trimming
 pub fn shortestEditRaw(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !?usize {
     const N = old.len;
     const M = new.len;
@@ -64,11 +69,9 @@ pub fn shortestEditRaw(comptime T: type, allocator: std.mem.Allocator, old: []co
     return null;
 }
 
-inline fn traceAt(trace: []const usize, d: usize, i: usize, MAX: usize) usize {
-    std.debug.assert(i >= MAX - d and i <= MAX + d);
-    return trace[d * (d + 1) / 2 + (i - (MAX - d)) / 2];
-}
+// ============================ PRELIMINARY OPERATION  ===========================
 
+// Get the length of common prefix with SIMD and @Vector
 pub fn getLengthCommonPrefix(comptime T: type, old: []const T, new: []const T) usize {
     const len = @min(old.len, new.len);
 
@@ -102,6 +105,7 @@ pub fn getLengthCommonPrefix(comptime T: type, old: []const T, new: []const T) u
     return len;
 }
 
+// Get the length of common suffix with SIMD and @Vector
 pub fn getLengthCommonSuffix(comptime T: type, old: []const T, new: []const T) usize {
     const len = @min(old.len, new.len);
 
@@ -147,7 +151,8 @@ pub fn getLengthCommonSuffix(comptime T: type, old: []const T, new: []const T) u
     return c;
 }
 
-fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Script {
+// This add the missing Edit to the script from the trimming done before
+fn addEdit(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Script {
     var fixedInner: Script = .empty;
     errdefer fixedInner.deinit(alloc);
 
@@ -201,17 +206,19 @@ fn addRun(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scri
     return fixedInner;
 }
 
-fn runDiffRaw(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
-    if (!debug) return diffRaw(T, allocator, old, new, max_d);
+// Run diffRaw but with debug flag distinct
+pub fn runDiffRaw(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
+    if (!debug) return myers(T, allocator, old, new, max_d);
 
     const start = std.Io.Clock.now(.awake, io);
-    const result = try diffRaw(T, allocator, old, new, max_d);
+    const result = try myers(T, allocator, old, new, max_d);
     const end = std.Io.Clock.now(.awake, io);
     std.debug.print("[timing] diffRaw={d} ns\n", .{start.durationTo(end).toNanoseconds()});
     return result;
 }
 
-fn myersImpl(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
+// Myers algoritm but with trimming
+pub fn myersWTrimming(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
     const pre = blk: {
         if (debug) {
             const start = std.Io.Clock.now(.awake, io);
@@ -241,24 +248,13 @@ fn myersImpl(comptime T: type, comptime debug: bool, allocator: std.mem.Allocato
         item.startOld += pre;
     }
 
-    return try addRun(allocator, pre, suf, inner);
+    return try addEdit(allocator, pre, suf, inner);
 }
 
-// is diffRaw but trimmed
+// =========================== MAIN ALGO ===================================
+
+// Implementation of classic myers algorithm returning the complete script
 pub fn myers(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
-    return myersImpl(T, false, allocator, old, new, max_d, {});
-}
-
-pub fn myersDebug(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: std.Io) !Script {
-    return myersImpl(T, true, allocator, old, new, max_d, io);
-}
-
-pub fn diffRawDebug(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: std.Io) !Script {
-    return runDiffRaw(T, true, allocator, old, new, max_d, io);
-}
-
-// this give the full path of operation
-pub fn diffRaw(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !Script {
     const N = old.len;
     const M = new.len;
     const MAX = N + M;
@@ -304,6 +300,11 @@ pub fn diffRaw(comptime T: type, allocator: std.mem.Allocator, old: []const T, n
     }
 
     return .empty;
+}
+
+inline fn traceAt(trace: []const usize, d: usize, i: usize, MAX: usize) usize {
+    std.debug.assert(i >= MAX - d and i <= MAX + d);
+    return trace[d * (d + 1) / 2 + (i - (MAX - d)) / 2];
 }
 
 pub fn backtrack(allocator: std.mem.Allocator, trace: []usize, d: usize, MAX: usize, oldLen: usize, newLen: usize) !Script {
