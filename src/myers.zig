@@ -312,12 +312,7 @@ fn findPath(
     old: []const T,
     new: []const T,
 ) !void {
-    const box = Box{
-        .left = left,
-        .right = right,
-        .top = top,
-        .bottom = bottom,
-    };
+    const box = Box{ .left = left, .right = right, .top = top, .bottom = bottom };
 
     if (box.width() == 0) {
         appendPoint(snake_points, used, .{ box.left, box.top });
@@ -331,7 +326,6 @@ fn findPath(
         return;
     }
 
-    // Solo DELETE
     if (box.height() == 0) {
         appendPoint(snake_points, used, .{ box.left, box.top });
 
@@ -349,45 +343,17 @@ fn findPath(
     const start = snake.start;
     const end = snake.end;
 
-    // Equivalent to:
-    // head = findPath(...) || [start]
     const head_before = used.*;
 
-    try findPath(
-        T,
-        allocator,
-        snake_points,
-        workspace,
-        used,
-        box.left,
-        box.top,
-        start[0],
-        start[1],
-        old,
-        new,
-    );
+    try findPath(T, allocator, snake_points, workspace, used, box.left, box.top, start[0], start[1], old, new);
 
     if (used.* == head_before) {
         appendPoint(snake_points, used, start);
     }
 
-    // Equivalent to:
-    // tail = findPath(...) || [end]
     const tail_before = used.*;
 
-    try findPath(
-        T,
-        allocator,
-        snake_points,
-        workspace,
-        used,
-        end[0],
-        end[1],
-        box.right,
-        box.bottom,
-        old,
-        new,
-    );
+    try findPath(T, allocator, snake_points, workspace, used, end[0], end[1], box.right, box.bottom, old, new);
 
     if (used.* == tail_before) {
         appendPoint(snake_points, used, end);
@@ -521,7 +487,6 @@ fn stepBackward(comptime T: type, box: Box, vf: []isize, vb: []isize, d: isize, 
 
         const x_signed: isize = y_relative + k + @as(isize, @intCast(box.left));
 
-        // y - box.top: relative y
         var x = x_signed;
         var prevX: isize = 0;
         if (d == 0 or y != prevY) {
@@ -530,8 +495,6 @@ fn stepBackward(comptime T: type, box: Box, vf: []isize, vb: []isize, d: isize, 
             prevX = x + 1;
         }
 
-        // because we're scanning backward, diagonal is available if
-        // a[x - 1] === b[x - 1]
         while (x > box.left and y > box.top and x <= box.right and y <= box.bottom and old[@intCast(x - 1)] == new[@intCast(y - 1)]) {
             x -= 1;
             y -= 1;
@@ -555,7 +518,7 @@ fn stepBackward(comptime T: type, box: Box, vf: []isize, vb: []isize, d: isize, 
     return null;
 }
 
-// Implementation of classic myers algorithm returning the compvare script
+// Implementation of linear space myers algorithm returning the compare script
 pub fn diff(
     comptime T: type,
     allocator: std.mem.Allocator,
@@ -581,19 +544,7 @@ pub fn diff(
 
     const workspace = try allocator.alloc(isize, frontier_len * 2);
     defer allocator.free(workspace);
-    try findPath(
-        T,
-        allocator,
-        snake_points,
-        workspace,
-        &used,
-        0,
-        0,
-        old.len,
-        new.len,
-        old,
-        new,
-    );
+    try findPath(T, allocator, snake_points, workspace, &used, 0, 0, old.len, new.len, old, new);
 
     if (used == 0) {
         return .empty;
@@ -633,7 +584,6 @@ pub fn diff(
         }
     }
 
-    // ponytail: checked after path construction; thread a budget through recursion if early cutoff matters.
     if (distance > max_d) return error.TooDifferent;
 
     return script;
