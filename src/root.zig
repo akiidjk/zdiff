@@ -47,7 +47,7 @@ pub fn diffRaw(
     var scriptWBytes = if (builtin.mode == .Debug)
         try myers.myersWTrimming(u8, true, alloc, old, new, 6500, io)
     else
-        try myers.myersWTrimming(u8, false, alloc, old, new, 6500, null);
+        try myers.myersWTrimming(u8, false, alloc, old, new, 6500, undefined);
     defer scriptWBytes.deinit(alloc);
     const hunksWBytes = try hunk.hunks(alloc, scriptWBytes.items, old.len, new.len, 1);
     defer alloc.free(hunksWBytes);
@@ -85,7 +85,7 @@ pub fn diffToken(
     var scriptWTokens = if (builtin.mode == .Debug)
         try myers.runDiffRaw(u32, true, alloc, oldTokens.ids, newTokens.ids, 6500, io)
     else
-        try myers.myers(u32, alloc, oldTokens.ids, newTokens.ids, 6500);
+        try myers.diff(u32, alloc, oldTokens.ids, newTokens.ids, 6500);
     defer scriptWTokens.deinit(alloc);
 
     const hunks_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);

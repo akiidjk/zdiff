@@ -44,7 +44,7 @@ fn measure(
     };
 
     { // warmup, non misurato
-        var w = try myers.myers(u8, alloc, a, b, 6726);
+        var w = try myers.diff(u8, alloc, a, b, 6726);
         w.deinit(alloc);
     }
 
@@ -53,7 +53,7 @@ fn measure(
         const d = (try myers.shortestEdit(u8, alloc, a, b, 6726)).?;
         const t1 = std.Io.Clock.now(.awake, io);
 
-        var script = try myers.myers(u8, alloc, a, b, 6726);
+        var script = try myers.diff(u8, alloc, a, b, 6726);
         defer script.deinit(alloc);
         const t2 = std.Io.Clock.now(.awake, io);
 
@@ -233,7 +233,7 @@ fn measurePipeline(alloc: std.mem.Allocator, io: std.Io, a: []const u8, b: []con
     for (0..reps) |_| {
         const t0 = std.Io.Clock.now(.awake, io);
 
-        var internMap: std.array_hash_map.String(usize) = .empty;
+        var internMap: std.array_hash_map.String(u32) = .empty;
         defer internMap.deinit(alloc);
 
         const old_t = try token.tokenizeBy(alloc, a, '\n', &internMap);
@@ -247,12 +247,12 @@ fn measurePipeline(alloc: std.mem.Allocator, io: std.Io, a: []const u8, b: []con
         const t1 = std.Io.Clock.now(.awake, io);
 
         const max_d = old_t.ids.len + new_t.ids.len;
-        var script = try myers.myers(usize, alloc, old_t.ids, new_t.ids, max_d);
+        var script = try myers.diff(u32, alloc, old_t.ids, new_t.ids, max_d);
         defer script.deinit(alloc);
 
         const t2 = std.Io.Clock.now(.awake, io);
 
-        const rebuilt = try applyScript(usize, alloc, script.items, old_t.ids, new_t.ids);
+        const rebuilt = try applyScript(u32, alloc, script.items, old_t.ids, new_t.ids);
         defer alloc.free(rebuilt);
 
         const t3 = std.Io.Clock.now(.awake, io);

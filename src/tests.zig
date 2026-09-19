@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const applyScript = @import("root.zig").applyScript;
-const diff = @import("myers.zig").myers;
+const diff = @import("myers.zig").diff;
 const Edit = @import("myers.zig").Edit;
 const hunk = @import("hunk.zig");
 const Op = @import("myers.zig").Op;
@@ -300,6 +300,10 @@ test "known distances" {
             return e;
         };
     }
+}
+
+test "max distance" {
+    try std.testing.expectError(error.TooDifferent, diff(u8, std.testing.allocator, "abc", "xyz", 5));
 }
 
 fn fuzzAlphabet(seed: u64, iterations: usize, alphabet: u8, max_len: usize) !void {
