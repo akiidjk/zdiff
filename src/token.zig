@@ -28,7 +28,7 @@ fn estimateLineCount(text: []const u8, separator: u8) usize {
     if (separator_count == 0)
         return 16; // fallback we don't know the correct value
 
-    const estimate = text.len * (separator_count / sample_len) + 1;
+    const estimate = text.len * separator_count / sample_len + 1;
 
     return estimate + estimate / 8; // + 12.5%
 }
