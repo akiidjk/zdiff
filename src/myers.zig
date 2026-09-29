@@ -239,6 +239,10 @@ pub fn myersWTrimming(comptime T: type, comptime debug: bool, allocator: std.mem
         break :blk getLengthCommonSuffix(T, old[pre..], new[pre..]);
     };
 
+    if (pre == old.len and old.len == new.len) {
+        return .empty;
+    }
+
     var inner = try runDiffRaw(T, debug, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d, io);
 
     defer inner.deinit(allocator);

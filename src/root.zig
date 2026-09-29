@@ -43,15 +43,22 @@ pub fn diffRaw(
     io: std.Io,
     old: []const u8,
     new: []const u8,
-) !void {
+) !u8 {
     var scriptWBytes = if (builtin.mode == .Debug)
         try myers.myersWTrimming(u8, true, alloc, old, new, 6500, io)
     else
         try myers.myersWTrimming(u8, false, alloc, old, new, 6500, undefined);
     defer scriptWBytes.deinit(alloc);
+
+    if (scriptWBytes.items.len == 0) {
+        return 0; // identical
+    }
+
     const hunksWBytes = try hunk.hunks(alloc, scriptWBytes.items, old.len, new.len, 1);
     defer alloc.free(hunksWBytes);
     try unified.viewHex(io, old, new, scriptWBytes.items, hunksWBytes);
+
+    return 1;
 }
 
 pub fn diffToken(
@@ -59,7 +66,7 @@ pub fn diffToken(
     io: std.Io,
     old: []const u8,
     new: []const u8,
-) !void {
+) !u8 {
     const context = 1;
     var interner: token.Interner = .{};
     defer interner.deinit(alloc);
@@ -68,6 +75,8 @@ pub fn diffToken(
         token.trimCommonDebug(io, old, new, '\n', context)
     else
         token.trimCommon(old, new, '\n', context);
+
+    if (trimmed.identical) return 0;
 
     const tokenize_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);
     const oldTokens = try token.tokenizeBy(alloc, trimmed.old, '\n', &interner, trimmed.old_incomplete);
@@ -97,12 +106,14 @@ pub fn diffToken(
     }
 
     try unified.viewTokenOffset(io, oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, trimmed.old, trimmed.new, trimmed.line_offset, trimmed.old_incomplete, trimmed.new_incomplete);
+
+    return 1;
 }
 
-pub fn diff(io: std.Io, alloc: std.mem.Allocator, old: []const u8, new: []const u8, raw: bool) !void {
+pub fn diff(io: std.Io, alloc: std.mem.Allocator, old: []const u8, new: []const u8, raw: bool) !u8 {
     if (raw) {
-        try diffRaw(alloc, io, old, new);
+        return try diffRaw(alloc, io, old, new);
     } else {
-        try diffToken(alloc, io, old, new);
+        return try diffToken(alloc, io, old, new);
     }
 }

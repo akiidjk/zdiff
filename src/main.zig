@@ -29,7 +29,7 @@ fn run() !void {
         std.debug.print("[timing] read={d} ns\n", .{read_start.durationTo(read_end).toNanoseconds()});
     }
 
-    try diff(io, alloc, old, new, config.binary);
+    std.process.exit(try diff(io, alloc, old, new, config.binary));
 }
 
 fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {

@@ -16,6 +16,7 @@ pub const CommonTrim = struct {
     line_offset: usize,
     old_incomplete: bool,
     new_incomplete: bool,
+    identical: bool,
 };
 
 pub const Interner = struct {
@@ -146,6 +147,7 @@ fn trimCommonImpl(comptime debug: bool, io: if (debug) std.Io else void, old: []
         .line_offset = line_offset,
         .old_incomplete = start < old_end and lastLineIncomplete(old, old_end, separator),
         .new_incomplete = start < new_end and lastLineIncomplete(new, new_end, separator),
+        .identical = prefix == old.len and old.len == new.len,
     };
 }
 
