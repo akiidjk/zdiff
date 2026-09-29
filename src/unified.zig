@@ -186,12 +186,12 @@ fn printPrefix(stdout: *std.Io.Writer, op: diff.Op) !void {
         .DELETE => {
             try stdout.writeAll(ANSI_RED);
             try stdout.writeAll("- ");
-            try stdout.writeAll(ANSI_RED);
+            try stdout.writeAll(ANSI_RESET);
         },
         .INSERT => {
             try stdout.writeAll(ANSI_GREEN);
             try stdout.writeAll("+ ");
-            try stdout.writeAll(ANSI_RED);
+            try stdout.writeAll(ANSI_RESET);
         },
     }
 }
