@@ -240,7 +240,11 @@ pub fn myersWTrimming(comptime T: type, comptime debug: bool, allocator: std.mem
     };
 
     if (pre == old.len and old.len == new.len) {
-        return .empty;
+        var script: Script = .empty;
+        if (old.len > 0) {
+            try script.append(allocator, .{ .op = .KEEP, .len = old.len, .startOld = 0, .startNew = 0 });
+        }
+        return script;
     }
 
     var inner = try runDiffRaw(T, debug, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d, io);
