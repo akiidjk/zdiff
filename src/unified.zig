@@ -8,6 +8,23 @@ const ANSI_RED = "\x1b[31m";
 const ANSI_GREEN = "\x1b[32m";
 const ANSI_RESET = "\x1b[0m";
 
+pub fn writeRange(w: *std.Io.Writer, start: usize, len: usize) !void {
+    const first = if (len == 0) start else start + 1;
+    if (len == 1) {
+        try w.print("{d}", .{first});
+    } else {
+        try w.print("{d},{d}", .{ first, len });
+    }
+}
+
+pub fn writeHunkHeader(w: *std.Io.Writer, old_start: usize, old_len: usize, new_start: usize, new_len: usize) !void {
+    try w.writeAll("@@ -");
+    try writeRange(w, old_start, old_len);
+    try w.writeAll(" +");
+    try writeRange(w, new_start, new_len);
+    try w.writeAll(" @@\n");
+}
+
 inline fn renderToken(raw_text: []const u8, tok: token.Token) []const u8 {
     return std.mem.trim(u8, raw_text[tok.start .. tok.start + tok.len], "\n");
 }
@@ -68,15 +85,7 @@ fn renderTokenHunks(
     new_incomplete: bool,
 ) !void {
     for (hunks) |hu| {
-        try stdout.print(
-            "@@ -{d},{d} +{d},{d} @@\n",
-            .{
-                hu.old_start + line_offset + 1,
-                hu.old_len,
-                hu.new_start + line_offset + 1,
-                hu.new_len,
-            },
-        );
+        try writeHunkHeader(stdout, hu.old_start + line_offset, hu.old_len, hu.new_start + line_offset, hu.new_len);
 
         const old_hunk_end = hu.old_start + hu.old_len;
         const new_hunk_end = hu.new_start + hu.new_len;
@@ -279,15 +288,8 @@ fn renderHexHunks(
     hunks: []const hunk.Hunk,
 ) !void {
     for (hunks) |hu| {
-        try stdout.print(
-            "\n@@ -{d},{d} +{d},{d} @@\n",
-            .{
-                hu.old_start + 1,
-                hu.old_len,
-                hu.new_start + 1,
-                hu.new_len,
-            },
-        );
+        try stdout.writeByte('\n');
+        try writeHunkHeader(stdout, hu.old_start, hu.old_len, hu.new_start, hu.new_len);
 
         const old_hunk_end = hu.old_start + hu.old_len;
         const new_hunk_end = hu.new_start + hu.new_len;

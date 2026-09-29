@@ -753,3 +753,27 @@ test "viewToken smoke" {
 
     try unified.viewToken(io, oldT.tokens, newT.tokens, script.items, hs, a, b);
 }
+
+fn expectHeader(expected: []const u8, old_start: usize, old_len: usize, new_start: usize, new_len: usize) !void {
+    var buf: [64]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try unified.writeHunkHeader(&w, old_start, old_len, new_start, new_len);
+    try std.testing.expectEqualStrings(expected, w.buffered());
+}
+
+test "hunk header: empty range starts at the preceding line" {
+    // File vuoto -> "foo": niente righe in old, la riga precedente e' la 0.
+    try expectHeader("@@ -0,0 +1 @@\n", 0, 0, 0, 1);
+    // "foo" -> file vuoto.
+    try expectHeader("@@ -1 +0,0 @@\n", 0, 1, 0, 0);
+    // Inserimento dopo la riga 4 (range vuoto in old che inizia all'indice 4).
+    try expectHeader("@@ -4,0 +5,2 @@\n", 4, 0, 4, 2);
+}
+
+test "hunk header: single line omits the length" {
+    try expectHeader("@@ -3 +3 @@\n", 2, 1, 2, 1);
+}
+
+test "hunk header: multi-line ranges" {
+    try expectHeader("@@ -2,3 +2,4 @@\n", 1, 3, 1, 4);
+}
