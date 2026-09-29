@@ -28,16 +28,17 @@ pub const Interner = struct {
     incomplete_seen: u2 = 0,
     next_id: u32 = 0,
 
-    pub inline fn deinit(self: *Interner, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Interner, allocator: std.mem.Allocator) void {
         self.lines.deinit(allocator);
     }
 
-    inline fn freshId(self: *Interner) u32 {
+    fn freshId(self: *Interner) u32 {
+        const id = self.next_id;
         self.next_id += 1;
-        return self.next_id;
+        return id;
     }
 
-    inline fn intern(self: *Interner, allocator: std.mem.Allocator, key: []const u8) !u32 {
+    fn intern(self: *Interner, allocator: std.mem.Allocator, key: []const u8) !u32 {
         const gop = try self.lines.getOrPut(allocator, key);
         if (!gop.found_existing) gop.value_ptr.* = self.freshId();
         return gop.value_ptr.*;
