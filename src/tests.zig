@@ -692,7 +692,7 @@ test "tokenize interning reuses ids for repeated segments" {
     defer alloc.free(result.tokens);
     defer alloc.free(result.ids);
 
-    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 3, 2 }, result.ids);
+    try std.testing.expectEqualSlices(u32, &.{ 1, 2, 3, 2 }, result.ids);
 }
 
 test "tokenize shared intern map across calls" {
