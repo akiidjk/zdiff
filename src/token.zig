@@ -14,7 +14,50 @@ pub const CommonTrim = struct {
     old: []const u8,
     new: []const u8,
     line_offset: usize,
+    old_incomplete: bool,
+    new_incomplete: bool,
 };
+
+pub const Interner = struct {
+    lines: std.array_hash_map.String(u32) = .empty,
+    incomplete: ?struct {
+        key: []const u8,
+        id: u32,
+    } = null,
+    incomplete_seen: u2 = 0,
+    next_id: u32 = 0,
+
+    pub inline fn deinit(self: *Interner, allocator: std.mem.Allocator) void {
+        self.lines.deinit(allocator);
+    }
+
+    inline fn freshId(self: *Interner) u32 {
+        self.next_id += 1;
+        return self.next_id;
+    }
+
+    inline fn intern(self: *Interner, allocator: std.mem.Allocator, key: []const u8) !u32 {
+        const gop = try self.lines.getOrPut(allocator, key);
+        if (!gop.found_existing) gop.value_ptr.* = self.freshId();
+        return gop.value_ptr.*;
+    }
+
+    fn internIncomplete(self: *Interner, key: []const u8) u32 {
+        std.debug.assert(self.incomplete_seen < 2);
+        self.incomplete_seen += 1;
+
+        if (self.incomplete) |seen| {
+            return if (std.mem.eql(u8, seen.key, key)) seen.id else self.freshId();
+        }
+        const id = self.freshId();
+        self.incomplete = .{ .key = key, .id = id };
+        return id;
+    }
+};
+
+fn lastLineIncomplete(text: []const u8, slice_end: usize, separator: u8) bool {
+    return text.len > 0 and text[text.len - 1] != separator and slice_end == text.len;
+}
 
 fn estimateLineCount(text: []const u8, separator: u8) usize {
     if (text.len == 0) return 0;
@@ -95,10 +138,14 @@ fn trimCommonImpl(comptime debug: bool, io: if (debug) std.Io else void, old: []
     for (old[0..start]) |byte| if (byte == separator) {
         line_offset += 1;
     };
+    const old_end = @max(start, suffixEnd(old, suffix, separator, context));
+    const new_end = @max(start, suffixEnd(new, suffix, separator, context));
     return .{
-        .old = old[start..@max(start, suffixEnd(old, suffix, separator, context))],
-        .new = new[start..@max(start, suffixEnd(new, suffix, separator, context))],
+        .old = old[start..old_end],
+        .new = new[start..new_end],
         .line_offset = line_offset,
+        .old_incomplete = start < old_end and lastLineIncomplete(old, old_end, separator),
+        .new_incomplete = start < new_end and lastLineIncomplete(new, new_end, separator),
     };
 }
 
@@ -123,57 +170,34 @@ test "trim common keeps exactly one suffix context line" {
     try std.testing.expectEqualStrings("before\nafter", trimmed.new);
 }
 
-pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8, internMap: *std.array_hash_map.String(u32)) !Tokenized {
-    var index: usize = 0;
-    var start: usize = 0;
-    var id: u32 = if (internMap.count() > 0) internMap.values()[internMap.count() - 1] + 1 else 0;
-
+pub fn tokenizeBy(
+    allocator: std.mem.Allocator,
+    text: []const u8,
+    separator: u8,
+    interner: *Interner,
+    last_incomplete: bool,
+) !Tokenized {
     var tokens: std.ArrayList(Token) = .empty;
+    errdefer tokens.deinit(allocator);
     var ids: std.ArrayList(u32) = .empty;
+    errdefer ids.deinit(allocator);
 
     const estimatedLine = estimateLineCount(text, separator);
     try tokens.ensureTotalCapacity(allocator, estimatedLine);
     try ids.ensureTotalCapacity(allocator, estimatedLine);
 
-    while (index < text.len) : (index += 1) {
-        if (text[index] == separator) {
-            const key = text[start..index];
-            const value = internMap.get(key);
-
-            if (value == null) {
-                try internMap.put(allocator, key, id);
-
-                try tokens.append(allocator, .{
-                    .len = index - start,
-                    .start = start,
-                });
-
-                try ids.append(allocator, id);
-
-                id += 1;
-            } else {
-                try tokens.append(allocator, .{
-                    .len = index - start,
-                    .start = start,
-                });
-                try ids.append(allocator, value orelse id);
-            }
-
-            start = index + 1;
-        }
+    var start: usize = 0;
+    while (std.mem.findScalarPos(u8, text, start, separator)) |index| {
+        try tokens.append(allocator, .{ .start = start, .len = index - start });
+        try ids.append(allocator, try interner.intern(allocator, text[start..index]));
+        start = index + 1;
     }
 
-    if (start < index) {
-        const key = text[start..index];
-        const value = internMap.get(key);
-        if (value) |existing| {
-            try tokens.append(allocator, .{ .len = index - start, .start = start });
-            try ids.append(allocator, existing);
-        } else {
-            try internMap.put(allocator, key, id);
-            try tokens.append(allocator, .{ .len = index - start, .start = start });
-            try ids.append(allocator, id);
-        }
+    if (start < text.len) {
+        try tokens.append(allocator, .{ .start = start, .len = text.len - start });
+        const key = text[start..];
+        const id = if (last_incomplete) interner.internIncomplete(key) else try interner.intern(allocator, key);
+        try ids.append(allocator, id);
     }
 
     return .{
@@ -183,10 +207,63 @@ pub fn tokenizeBy(allocator: std.mem.Allocator, text: []const u8, separator: u8,
 }
 
 test "tokenizeBy does not invent a line after trailing separator" {
-    var intern: std.array_hash_map.String(u32) = .empty;
+    var intern: Interner = .{};
     defer intern.deinit(std.testing.allocator);
-    const result = try tokenizeBy(std.testing.allocator, "one\ntwo\n", '\n', &intern);
+    const result = try tokenizeBy(std.testing.allocator, "one\ntwo\n", '\n', &intern, false);
     defer std.testing.allocator.free(result.tokens);
     defer std.testing.allocator.free(result.ids);
     try std.testing.expectEqual(2, result.tokens.len);
+}
+
+fn expectLastIds(old: []const u8, new: []const u8, expect_equal: bool) !void {
+    const a = std.testing.allocator;
+    var intern: Interner = .{};
+    defer intern.deinit(a);
+    const t = trimCommon(old, new, '\n', 1);
+    const o = try tokenizeBy(a, t.old, '\n', &intern, t.old_incomplete);
+    defer a.free(o.tokens);
+    defer a.free(o.ids);
+    const n = try tokenizeBy(a, t.new, '\n', &intern, t.new_incomplete);
+    defer a.free(n.tokens);
+    defer a.free(n.ids);
+    try std.testing.expectEqual(expect_equal, o.ids[o.ids.len - 1] == n.ids[n.ids.len - 1]);
+}
+
+test "incomplete last line differs from complete one" {
+    try expectLastIds("a\nx\n", "a\nx", false);
+    try expectLastIds("a\nx", "a\nx\n", false);
+}
+
+test "two incomplete last lines with same text are equal" {
+    try expectLastIds("a\nold\nx", "a\nnew\nx", true);
+}
+
+test "line cut by trimCommon is not incomplete" {
+    const t = trimCommon("a\nb\nold\nc\nd\n", "a\nb\nnew\nc\nd\n", '\n', 1);
+    try std.testing.expect(!t.old_incomplete and !t.new_incomplete);
+}
+
+test "empty vs incomplete" {
+    const t = trimCommon("", "foo", '\n', 1);
+    try std.testing.expect(!t.old_incomplete and t.new_incomplete);
+}
+
+test "two incomplete last lines with different text differ" {
+    try expectLastIds("a\nold\nx", "a\nnew\ny", false);
+}
+
+test "incomplete line never collides with a complete line id" {
+    // `x` compare completa in old e incompleta in new: id diversi,
+    // e l'id incompleto non deve riusare nessun id di `lines`.
+    const a = std.testing.allocator;
+    var intern: Interner = .{};
+    defer intern.deinit(a);
+    const o = try tokenizeBy(a, "x\ny\n", '\n', &intern, false);
+    defer a.free(o.tokens);
+    defer a.free(o.ids);
+    const n = try tokenizeBy(a, "y\nx", '\n', &intern, true);
+    defer a.free(n.tokens);
+    defer a.free(n.ids);
+    for (o.ids) |id| try std.testing.expect(id != n.ids[1]);
+    try std.testing.expectEqual(o.ids[1], n.ids[0]);
 }

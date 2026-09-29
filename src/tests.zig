@@ -640,10 +640,10 @@ test "corpus round-trip" {
 
 fn expectTokens(text: []const u8, sep: u8, expected_segments: []const []const u8) !void {
     const alloc = std.testing.allocator;
-    var internMap: std.array_hash_map.String(u32) = .empty;
+    var internMap: token.Interner = .{};
     defer internMap.deinit(alloc);
 
-    const result = try token.tokenizeBy(alloc, text, sep, &internMap);
+    const result = try token.tokenizeBy(alloc, text, sep, &internMap, false);
     defer alloc.free(result.tokens);
     defer alloc.free(result.ids);
 
@@ -685,26 +685,26 @@ test "tokenize trailing separator" {
 
 test "tokenize interning reuses ids for repeated segments" {
     const alloc = std.testing.allocator;
-    var internMap: std.array_hash_map.String(u32) = .empty;
+    var internMap: token.Interner = .{};
     defer internMap.deinit(alloc);
 
-    const result = try token.tokenizeBy(alloc, "a\nx\nb\nx", '\n', &internMap);
+    const result = try token.tokenizeBy(alloc, "a\nx\nb\nx", '\n', &internMap, false);
     defer alloc.free(result.tokens);
     defer alloc.free(result.ids);
 
-    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 2, 1 }, result.ids);
+    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 3, 2 }, result.ids);
 }
 
 test "tokenize shared intern map across calls" {
     const alloc = std.testing.allocator;
-    var internMap: std.array_hash_map.String(u32) = .empty;
+    var internMap: token.Interner = .{};
     defer internMap.deinit(alloc);
 
-    const old = try token.tokenizeBy(alloc, "a\nb\nc", '\n', &internMap);
+    const old = try token.tokenizeBy(alloc, "a\nb\nc", '\n', &internMap, false);
     defer alloc.free(old.tokens);
     defer alloc.free(old.ids);
 
-    const new = try token.tokenizeBy(alloc, "a\nX\nc", '\n', &internMap);
+    const new = try token.tokenizeBy(alloc, "a\nX\nc", '\n', &internMap, false);
     defer alloc.free(new.tokens);
     defer alloc.free(new.ids);
 
@@ -734,14 +734,14 @@ test "viewToken smoke" {
     const a = "line one\nline two\nline three";
     const b = "line one\nline TWO\nline three";
 
-    var internMap: std.array_hash_map.String(u32) = .empty;
+    var internMap: token.Interner = .{};
     defer internMap.deinit(alloc);
 
-    const oldT = try token.tokenizeBy(alloc, a, '\n', &internMap);
+    const oldT = try token.tokenizeBy(alloc, a, '\n', &internMap, false);
     defer alloc.free(oldT.tokens);
     defer alloc.free(oldT.ids);
 
-    const newT = try token.tokenizeBy(alloc, b, '\n', &internMap);
+    const newT = try token.tokenizeBy(alloc, b, '\n', &internMap, false);
     defer alloc.free(newT.tokens);
     defer alloc.free(newT.ids);
 

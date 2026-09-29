@@ -233,14 +233,14 @@ fn measurePipeline(alloc: std.mem.Allocator, io: std.Io, a: []const u8, b: []con
     for (0..reps) |_| {
         const t0 = std.Io.Clock.now(.awake, io);
 
-        var internMap: std.array_hash_map.String(u32) = .empty;
+        var internMap: token.Interner = .{};
         defer internMap.deinit(alloc);
 
-        const old_t = try token.tokenizeBy(alloc, a, '\n', &internMap);
+        const old_t = try token.tokenizeBy(alloc, a, '\n', &internMap, false);
         defer alloc.free(old_t.tokens);
         defer alloc.free(old_t.ids);
 
-        const new_t = try token.tokenizeBy(alloc, b, '\n', &internMap);
+        const new_t = try token.tokenizeBy(alloc, b, '\n', &internMap, false);
         defer alloc.free(new_t.tokens);
         defer alloc.free(new_t.ids);
 

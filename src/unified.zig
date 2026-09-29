@@ -12,6 +12,10 @@ inline fn renderToken(raw_text: []const u8, tok: token.Token) []const u8 {
     return std.mem.trim(u8, raw_text[tok.start .. tok.start + tok.len], "\n");
 }
 
+inline fn writeMarkerIfLast(stdout: *std.Io.Writer, index: usize, len: usize, incomplete: bool) !void {
+    if (incomplete and index + 1 == len) try stdout.writeAll("\\ No newline at end of file\n");
+}
+
 pub fn viewToken(
     io: std.Io,
     old: []token.Token,
@@ -21,7 +25,7 @@ pub fn viewToken(
     raw_old: []const u8,
     raw_new: []const u8,
 ) !void {
-    return viewTokenOffset(io, old, new, script, hunks, raw_old, raw_new, 0);
+    return viewTokenOffset(io, old, new, script, hunks, raw_old, raw_new, 0, false, false);
 }
 
 pub fn viewTokenOffset(
@@ -33,6 +37,8 @@ pub fn viewTokenOffset(
     raw_old: []const u8,
     raw_new: []const u8,
     line_offset: usize,
+    old_incomplete: bool,
+    new_incomplete: bool,
 ) !void {
     var stdout_buffer: [1024 * 32]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
@@ -60,10 +66,11 @@ pub fn viewTokenOffset(
                     const end = @min(edit.startOld + edit.len, old_hunk_end);
 
                     if (start < end) {
-                        for (old[start..end]) |item| {
+                        for (old[start..end], start..) |item, i| {
                             try stdout.writeByte(' ');
                             try stdout.writeAll(renderToken(raw_old, item));
                             try stdout.writeByte('\n');
+                            try writeMarkerIfLast(stdout, i, old.len, old_incomplete);
                         }
                     }
                 },
@@ -72,12 +79,13 @@ pub fn viewTokenOffset(
                     const end = @min(edit.startOld + edit.len, old_hunk_end);
 
                     if (start < end) {
-                        for (old[start..end]) |item| {
+                        for (old[start..end], start..) |item, i| {
                             try stdout.writeAll(ANSI_RED);
                             try stdout.writeByte('-');
                             try stdout.writeAll(renderToken(raw_old, item));
                             try stdout.writeAll(ANSI_RESET);
                             try stdout.writeByte('\n');
+                            try writeMarkerIfLast(stdout, i, old.len, old_incomplete);
                         }
                     }
                 },
@@ -85,12 +93,13 @@ pub fn viewTokenOffset(
                     const start = @max(edit.startNew, hu.new_start);
                     const end = @min(edit.startNew + edit.len, new_hunk_end);
                     if (start < end) {
-                        for (new[start..end]) |item| {
+                        for (new[start..end], start..) |item, i| {
                             try stdout.writeAll(ANSI_GREEN);
                             try stdout.writeByte('+');
                             try stdout.writeAll(renderToken(raw_new, item));
                             try stdout.writeAll(ANSI_RESET);
                             try stdout.writeByte('\n');
+                            try writeMarkerIfLast(stdout, i, new.len, new_incomplete);
                         }
                     }
                 },

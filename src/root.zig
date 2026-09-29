@@ -61,8 +61,8 @@ pub fn diffToken(
     new: []const u8,
 ) !void {
     const context = 1;
-    var internMap: std.array_hash_map.String(u32) = .empty;
-    defer internMap.deinit(alloc);
+    var interner: token.Interner = .{};
+    defer interner.deinit(alloc);
 
     const trimmed = if (builtin.mode == .Debug)
         token.trimCommonDebug(io, old, new, '\n', context)
@@ -70,11 +70,11 @@ pub fn diffToken(
         token.trimCommon(old, new, '\n', context);
 
     const tokenize_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);
-    const oldTokens = try token.tokenizeBy(alloc, trimmed.old, '\n', &internMap);
+    const oldTokens = try token.tokenizeBy(alloc, trimmed.old, '\n', &interner, trimmed.old_incomplete);
     defer alloc.free(oldTokens.tokens);
     defer alloc.free(oldTokens.ids);
 
-    const newTokens = try token.tokenizeBy(alloc, trimmed.new, '\n', &internMap);
+    const newTokens = try token.tokenizeBy(alloc, trimmed.new, '\n', &interner, trimmed.new_incomplete);
     defer alloc.free(newTokens.tokens);
     defer alloc.free(newTokens.ids);
     if (builtin.mode == .Debug) {
@@ -96,7 +96,7 @@ pub fn diffToken(
         std.debug.print("[timing] hunks={d} ns\n", .{hunks_start.durationTo(hunks_end).toNanoseconds()});
     }
 
-    try unified.viewTokenOffset(io, oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, trimmed.old, trimmed.new, trimmed.line_offset);
+    try unified.viewTokenOffset(io, oldTokens.tokens, newTokens.tokens, scriptWTokens.items, hunksWTokens, trimmed.old, trimmed.new, trimmed.line_offset, trimmed.old_incomplete, trimmed.new_incomplete);
 }
 
 pub fn diff(io: std.Io, alloc: std.mem.Allocator, old: []const u8, new: []const u8, raw: bool) !void {
