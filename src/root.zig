@@ -50,10 +50,6 @@ pub fn diffRaw(
         try myers.myersWTrimming(u8, false, alloc, old, new, 6500, undefined);
     defer scriptWBytes.deinit(alloc);
 
-    if (scriptWBytes.items.len == 0) {
-        return 0; // identical
-    }
-
     const hunksWBytes = try hunk.hunks(alloc, scriptWBytes.items, old.len, new.len, 1);
     defer alloc.free(hunksWBytes);
     try unified.viewHex(io, old, new, scriptWBytes.items, hunksWBytes);
