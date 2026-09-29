@@ -28,6 +28,13 @@ pub fn viewToken(
     return viewTokenOffset(io, old, new, script, hunks, raw_old, raw_new, 0, false, false);
 }
 
+fn realWriteError(writer: *const std.Io.File.Writer, err: anyerror) anyerror {
+    if (err == error.WriteFailed) {
+        if (writer.err) |real| return real;
+    }
+    return err;
+}
+
 pub fn viewTokenOffset(
     io: std.Io,
     old: []token.Token,
@@ -42,9 +49,24 @@ pub fn viewTokenOffset(
 ) !void {
     var stdout_buffer: [1024 * 32]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
-    const stdout = &stdout_writer.interface;
     const stdout_is_tty = try std.Io.File.stdout().isTty(io);
+    renderTokenHunks(&stdout_writer.interface, stdout_is_tty, old, new, script, hunks, raw_old, raw_new, line_offset, old_incomplete, new_incomplete) catch |err|
+        return realWriteError(&stdout_writer, err);
+}
 
+fn renderTokenHunks(
+    stdout: *std.Io.Writer,
+    stdout_is_tty: bool,
+    old: []token.Token,
+    new: []token.Token,
+    script: []const diff.Edit,
+    hunks: []const hunk.Hunk,
+    raw_old: []const u8,
+    raw_new: []const u8,
+    line_offset: usize,
+    old_incomplete: bool,
+    new_incomplete: bool,
+) !void {
     for (hunks) |hu| {
         try stdout.print(
             "@@ -{d},{d} +{d},{d} @@\n",
@@ -243,9 +265,19 @@ pub fn viewHex(
 ) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
-    const stdout = &stdout_writer.interface;
     const stdout_is_tty = try std.Io.File.stdout().isTty(io);
+    renderHexHunks(&stdout_writer.interface, stdout_is_tty, old, new, script, hunks) catch |err|
+        return realWriteError(&stdout_writer, err);
+}
 
+fn renderHexHunks(
+    stdout: *std.Io.Writer,
+    stdout_is_tty: bool,
+    old: []const u8,
+    new: []const u8,
+    script: []const diff.Edit,
+    hunks: []const hunk.Hunk,
+) !void {
     for (hunks) |hu| {
         try stdout.print(
             "\n@@ -{d},{d} +{d},{d} @@\n",
