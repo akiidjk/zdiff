@@ -54,11 +54,12 @@ run_case() {
         --export-json "$RESULTS/$name.json" \
         -n zdiff "$zdiff_q $old_q $new_q >/dev/null" \
         -n 'GNU diff' "$gnu_cmd" \
-        -n 'GNU diff --minimal' "$minimal_cmd"
+        -n 'GNU diff --minimal' "$minimal_cmd" \
+        -i
     hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
-        --export-json "$RESULTS/$name-memory.json" -n 'GNU diff' "$gnu_cmd"
+        --export-json "$RESULTS/$name-memory.json" -n 'GNU diff' "$gnu_cmd" -i
     hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
-        --export-json "$RESULTS/$name-minimal-memory.json" -n 'GNU diff --minimal' "$minimal_cmd"
+        --export-json "$RESULTS/$name-minimal-memory.json" -n 'GNU diff --minimal' "$minimal_cmd" -i
 }
 
 run_case large-few-changes "$tmp/large.a" "$tmp/large.b"
@@ -72,12 +73,12 @@ hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
     --export-json "$RESULTS/many-small-files.json" \
     -n zdiff "for old in $small_q/*.a; do $zdiff_q \"\$old\" \"\${old%.a}.b\" >/dev/null || exit; done" \
     -n 'GNU diff' "for old in $small_q/*.a; do diff -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done" \
-    -n 'GNU diff --minimal' "for old in $small_q/*.a; do diff --minimal -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
+    -n 'GNU diff --minimal' "for old in $small_q/*.a; do diff --minimal -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done" -i
 hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
     --export-json "$RESULTS/many-small-files-memory.json" \
-    -n 'GNU diff' "for old in $small_q/*.a; do diff -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
+    -n 'GNU diff' "for old in $small_q/*.a; do diff -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done" -i
 hyperfine --shell=bash --warmup "$WARMUP" --runs "$RUNS" \
     --export-json "$RESULTS/many-small-files-minimal-memory.json" \
-    -n 'GNU diff --minimal' "for old in $small_q/*.a; do diff --minimal -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done"
+    -n 'GNU diff --minimal' "for old in $small_q/*.a; do diff --minimal -U 1 --color=always \"\$old\" \"\${old%.a}.b\" >/dev/null; status=\$?; [[ \$status -le 1 ]] || exit \$status; done" -i
 
 printf 'Results: %s\n' "$RESULTS"
