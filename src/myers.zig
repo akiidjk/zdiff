@@ -526,6 +526,14 @@ fn stepBackward(comptime T: type, box: Box, vf: []isize, vb: []isize, d: isize, 
     return null;
 }
 
+// TOO_EXPENSIVE from GNU diffutils (analyze.c): ~sqrt of the input size, at least 4096.
+pub fn tooExpensive(old_len: usize, new_len: usize) usize {
+    var limit: usize = 1;
+    var diags = old_len + new_len + 3;
+    while (diags != 0) : (diags >>= 2) limit <<= 1;
+    return @max(4096, limit);
+}
+
 // Implementation of linear space myers algorithm returning the compare script
 pub fn diff(
     comptime T: type,

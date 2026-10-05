@@ -777,3 +777,9 @@ test "hunk header: single line omits the length" {
 test "hunk header: multi-line ranges" {
     try expectHeader("@@ -2,3 +2,4 @@\n", 1, 3, 1, 4);
 }
+
+test "tooExpensive: ~sqrt of input size, floor 4096" {
+    const tooExpensive = @import("myers.zig").tooExpensive;
+    try std.testing.expectEqual(4096, tooExpensive(0, 0));
+    try std.testing.expectEqual(1 << 16, tooExpensive(1 << 29, 1 << 29));
+}

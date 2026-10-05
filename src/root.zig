@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const builtin = @import("builtin");
 
+const discard = @import("discard.zig");
 pub const hunk = @import("hunk.zig");
 const myers = @import("myers.zig");
 pub const token = @import("token.zig");
@@ -91,10 +92,17 @@ pub fn diffToken(
         std.debug.print("[timing] tokenize={d} ns\n", .{tokenize_start.durationTo(tokenize_end).toNanoseconds()});
     }
 
-    var scriptWTokens = if (builtin.mode == .Debug)
-        try myers.runDiffRaw(u32, true, alloc, oldTokens.ids, newTokens.ids, 6500, io)
+    const discarded = try discard.discard_confusing_lines(alloc, &interner, oldTokens, newTokens);
+    defer discarded.deinit(alloc);
+
+    const max_d = myers.tooExpensive(discarded.old.ids.len, discarded.new.ids.len);
+    var reduced = if (builtin.mode == .Debug)
+        try myers.runDiffRaw(u32, true, alloc, discarded.old.ids, discarded.new.ids, max_d, io)
     else
-        try myers.diff(u32, alloc, oldTokens.ids, newTokens.ids, 6500);
+        try myers.diff(u32, alloc, discarded.old.ids, discarded.new.ids, max_d);
+    defer reduced.deinit(alloc);
+
+    var scriptWTokens = try discard.buildScript(alloc, discarded, reduced.items);
     defer scriptWTokens.deinit(alloc);
 
     const hunks_start = if (builtin.mode == .Debug) std.Io.Clock.now(.awake, io);
