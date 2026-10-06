@@ -9,7 +9,7 @@ pub const Hunk = struct {
     new_start: usize,
     new_len: usize,
     first_run: usize,
-    run_count: usize, // script.items index
+    run_count: usize, // Number of entries in script.items.
 };
 
 pub fn getGroup(script: []const Edit, context: usize, first_run: usize) Hunk {
@@ -67,7 +67,7 @@ pub fn hunks(
 
     while (first_run < script.len) {
 
-        // Cerca la prossima modifica
+        // Skip unchanged entries until the next edit.
         while (first_run < script.len and script[first_run].op == .KEEP)
             first_run += 1;
 

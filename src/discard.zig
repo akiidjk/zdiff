@@ -28,7 +28,7 @@ pub const Discarded = struct {
 const Mark = enum(u2) { keep, discard, provisional };
 
 pub fn discard_confusing_lines(allocator: std.mem.Allocator, interner: *const token.Interner, oldToken: token.Tokenized, newToken: token.Tokenized) !Discarded {
-    // Interned ids are dense from zero, so a flat array is enough for the counts.
+    // IDs are dense from zero, so a flat count array is enough.
     const old_counts = try countIds(allocator, interner.next_id, oldToken.ids);
     defer allocator.free(old_counts);
     const new_counts = try countIds(allocator, interner.next_id, newToken.ids);
@@ -55,7 +55,7 @@ fn countIds(allocator: std.mem.Allocator, id_count: u32, ids: []const u32) ![]us
 }
 
 fn markLines(allocator: std.mem.Allocator, ids: []const u32, other_counts: []const usize) ![]Mark {
-    // MANY is ~5 * sqrt(lines / 64): the threshold for provisionally discardable lines.
+    // Lines above this frequency are provisional discards.
     var many: usize = 5;
     var tem = ids.len / 64;
     while (true) {
@@ -72,7 +72,7 @@ fn markLines(allocator: std.mem.Allocator, ids: []const u32, other_counts: []con
     return marks;
 }
 
-// Cancel provisional discards that are not in the middle of a run of discards.
+// Keep provisional discards unless they sit inside a run of definite discards.
 fn refineRuns(marks: []Mark) void {
     var i: usize = 0;
     while (i < marks.len) : (i += 1) {
@@ -104,7 +104,7 @@ fn refineRuns(marks: []Mark) void {
                 if (m.* == .provisional) m.* = .keep;
             }
         } else {
-            // MINIMUM is ~sqrt(len / 4) + 1: cancel any subrun of that many provisionals.
+            // Restore provisional runs that meet this length threshold.
             var minimum: usize = 1;
             var t = run.len >> 2;
             while (true) {
@@ -128,8 +128,8 @@ fn refineRuns(marks: []Mark) void {
                 }
             }
 
-            // From each edge, cancel provisionals until 3 certain discards in a row
-            // or the first certain discard at least 8 lines in.
+            // Restore the edges until three definite discards appear in a row,
+            // or until the first one is at least eight lines in.
             trimEdge(run, false);
             trimEdge(run, true);
         }
@@ -176,8 +176,8 @@ fn split(allocator: std.mem.Allocator, ids: []const u32, marks: []const Mark) !S
     return .{ .ids = owned_ids, .index = try index.toOwnedSlice(allocator), .changed = changed };
 }
 
-// Map a script computed on the discarded sequences back onto the original ones.
-// Consumes `discarded.*.changed`.
+// Map a script for the reduced inputs back to the original inputs.
+// This consumes `discarded.*.changed`.
 pub fn buildScript(allocator: std.mem.Allocator, discarded: Discarded, reduced: []const myers.Edit) !std.ArrayList(myers.Edit) {
     const old = discarded.old;
     const new = discarded.new;
@@ -246,7 +246,7 @@ test "lines without a match are discarded and script still rebuilds new" {
 }
 
 test "frequent lines inside a run of discards are dropped" {
-    // `}` matches more than MANY times in new; surrounded by unique lines it is discarded.
+    // `}` is too common in new, so unique neighbors cause it to be discarded.
     const new = "}\n" ** 10;
     try expectRoundTrip("u1\nu2\nu3\n}\nu4\nu5\nu6\n", new);
 

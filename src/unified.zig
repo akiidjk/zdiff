@@ -136,7 +136,7 @@ fn renderTokenHunks(
                 },
             }
         }
-        if (stdout_is_tty) try stdout.flush(); // flush each hunk
+        if (stdout_is_tty) try stdout.flush(); // Show each hunk immediately in a terminal.
     }
     try stdout.flush();
 }

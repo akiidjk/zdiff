@@ -708,9 +708,9 @@ test "tokenize shared intern map across calls" {
     defer alloc.free(new.tokens);
     defer alloc.free(new.ids);
 
-    try std.testing.expectEqual(old.ids[0], new.ids[0]); // "a" invariato -> stesso id
-    try std.testing.expectEqual(old.ids[2], new.ids[2]); // "\nc" invariato -> stesso id
-    try std.testing.expect(old.ids[1] != new.ids[1]); // "\nb" vs "\nX" -> id diversi
+    try std.testing.expectEqual(old.ids[0], new.ids[0]); // Unchanged "a" keeps its ID.
+    try std.testing.expectEqual(old.ids[2], new.ids[2]); // Unchanged "\nc" keeps its ID.
+    try std.testing.expect(old.ids[1] != new.ids[1]); // "\nb" and "\nX" need different IDs.
 }
 
 test "viewHex smoke" {
@@ -762,11 +762,11 @@ fn expectHeader(expected: []const u8, old_start: usize, old_len: usize, new_star
 }
 
 test "hunk header: empty range starts at the preceding line" {
-    // File vuoto -> "foo": niente righe in old, la riga precedente e' la 0.
+    // Empty file to "foo": no old line exists, so the preceding line is zero.
     try expectHeader("@@ -0,0 +1 @@\n", 0, 0, 0, 1);
-    // "foo" -> file vuoto.
+    // "foo" to an empty file.
     try expectHeader("@@ -1 +0,0 @@\n", 0, 1, 0, 0);
-    // Inserimento dopo la riga 4 (range vuoto in old che inizia all'indice 4).
+    // Insert after line 4. The empty old range starts at index 4.
     try expectHeader("@@ -4,0 +5,2 @@\n", 4, 0, 4, 2);
 }
 

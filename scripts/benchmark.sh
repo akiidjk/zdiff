@@ -19,7 +19,7 @@ command -v diff >/dev/null || { echo "error: GNU diff is required" >&2; exit 1; 
 }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/zdiff-bench.XXXXXX")"
-# trap 'rm -rf "$tmp"' EXIT
+# Leave the generated files around for inspection.
 mkdir -p "$RESULTS" "$tmp/small"
 
 zig build --build-file "$ROOT/build.zig" -Doptimize=ReleaseFast --prefix "$ROOT/zig-out"

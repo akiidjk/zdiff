@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gen-corpus.sh <repo> [outdir] [n_commit]
+# Generate a corpus from changed files in a repository's recent history.
 set -uo pipefail
 REPO="${1:?usage: gen-corpus.sh <repo> [outdir] [n_commit]}"
 OUT="${2:-corpus}"

@@ -11,8 +11,8 @@ pub const unified = @import("unified.zig");
 pub fn applyScript(comptime T: type, alloc: std.mem.Allocator, script: []const myers.Edit, old: []const T, new: []const T) ![]T {
     var out: std.ArrayList(T) = .empty;
     errdefer out.deinit(alloc);
-    var i: usize = 0; // cursore su old
-    var j: usize = 0; // cursore su new
+    var i: usize = 0; // Current position in old.
+    var j: usize = 0; // Current position in new.
     for (script) |edit| {
         if (edit.startOld != i or edit.startNew != j) return error.CursorMismatch;
 

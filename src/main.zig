@@ -57,9 +57,7 @@ fn run() !void {
 }
 
 fn parseArgs(r: *cli.AppRunner) cli.AppRunner.Error!cli.ExecFn {
-    // Since we call r.getAction in this function, all r.alloc* invocation are unnecessary.
-    // We can directly pass slices of commands, options, and positional arguments,
-    // like `.options = &.{....}`
+    // `getAction` owns this data, so these slices can live on the stack.
     const app = cli.App{
         .option_envvar_prefix = "ZDIFF_",
         .command = cli.Command{

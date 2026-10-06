@@ -60,7 +60,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/bench.zig"),
             .target = target,
-            .optimize = .ReleaseFast, // sempre, mai Debug
+            .optimize = .ReleaseFast, // Benchmarks should not run in Debug mode.
         }),
     });
     const run_bench = b.addRunArtifact(bench);

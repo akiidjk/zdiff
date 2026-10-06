@@ -1,28 +1,30 @@
 # zdiff
 
-A `diff`-like tool and library written in Zig, built around the [Myers diff
-algorithm](http://www.xmailserver.org/diff2.pdf) (the same algorithm behind
-GNU `diff` and Git).
+A small `diff`-like tool and library for Zig. It uses the [Myers diff
+algorithm](http://www.xmailserver.org/diff2.pdf), the same algorithm behind
+GNU `diff` and Git.
 
 ## How it works
 
-The diff is computed in four stages, each in its own module under `src/`:
+For text files, `zdiff` first skips the matching start and end. The remaining
+work moves through five small stages in `src/`:
 
 ```mermaid
 flowchart TD
-    A["old / new bytes"] --> B
-    B["1. token.zig<br/>split into lines, intern repeated<br/>lines to integer ids"] --> C
-    C["2. myers.zig<br/>shortest edit script over the ids<br/>(Myers O(ND), common prefix/suffix<br/>trimmed before the core algorithm)"] --> D
-    D["3. hunk.zig<br/>group nearby edits into contiguous<br/>hunks with context<br/>(the '@@ -a,b +c,d @@' blocks)"] --> E
-    E["4. unified.zig<br/>render: colored line-based unified<br/>view, or colored hex/ASCII view<br/>for byte-level diffing"]
+    A["old / new bytes"] --> B["trim common prefix and suffix"] --> C
+    C["1. token.zig<br/>split into lines, intern repeated<br/>lines to integer ids"] --> D
+    D["2. discard.zig<br/>remove lines that cannot help<br/>find a useful match"] --> E
+    E["3. myers.zig<br/>shortest edit script over the<br/>remaining ids"] --> F
+    F["4. rebuild the complete edit script"] --> G
+    G["5. hunk.zig + unified.zig<br/>group nearby edits and render a colored<br/>unified view, or hex/ASCII byte diff"]
 ```
 
-`src/root.zig` wires these into the public `diff()` entry point and also
-exposes `applyScript()`, which replays an edit script against `old`/`new` to
-reconstruct `new` — used in tests and benchmarks to check round-trip
-correctness.
+`src/root.zig` ties this together behind `diff()`. It also exposes
+`applyScript()`, which replays an edit script to rebuild `new`. The tests and
+benchmarks use it as a round-trip check.
 
-`src/main.zig` is the CLI: it reads two files and calls `diff()`.
+`src/main.zig` is the command-line wrapper. It reads two files and calls
+`diff()`.
 
 ## Install
 
@@ -57,39 +59,44 @@ exe.root_module.addImport("zdiff", zdiff_dep.module("zdiff"));
 zig build run -- <old-file> <new-file>
 # or, after zig build:
 ./zig-out/bin/zdiff <old-file> <new-file>
+
+# byte-by-byte hex/ASCII diff
+./zig-out/bin/zdiff --binary <old-file> <new-file>
 ```
 
-This tokenizes both files by line, diffs them, and prints a colored unified
-diff (`@@ -a,b +c,d @@` hunk headers, `-`/`+`/space-prefixed lines).
+By default, it splits both files into lines and prints a colored unified diff.
+That means `@@ -a,b +c,d @@` headers and lines beginning with `-`, `+`, or a
+space. Empty and single-line ranges follow the usual unified-diff rules. A
+file without a final newline gets the familiar `\\ No newline at end of file`
+marker.
+
+The exit status is `0` when files match, `1` when they differ, and `2` for an
+error such as an unreadable file or a diff that is too large to calculate.
 
 ## Library usage
 
 ```zig
 const zdiff = @import("zdiff");
 
-// line-based diff, prints colored unified output to stdout
-try zdiff.diff(allocator, old_bytes, new_bytes, false);
+// Line diff, written to stdout as colored unified output.
+_ = try zdiff.diff(io, allocator, old_bytes, new_bytes, false);
 
-// raw byte diff, prints colored hex/ASCII dump instead
-try zdiff.diff(allocator, old_bytes, new_bytes, true);
+// Byte diff, written as a colored hex and ASCII dump.
+_ = try zdiff.diff(io, allocator, old_bytes, new_bytes, true);
 ```
 
-The `zdiff` module also re-exports the `token`, `hunk`, and `unified`
-submodules (their types and rendering helpers), for code that consumes a
-`diff()`-produced view rather than calling into the algorithm itself. The
-Myers edit-script builder (`myers.myers` / `myers.shortestEdit`) is currently
-internal to the package and not re-exported by `root.zig`, so `diff()` is the
-supported entry point for computing a diff from library code today.
+The module re-exports `token`, `hunk`, and `unified` for callers that need the
+types or renderers behind a `diff()` result. `diff()` returns the same `0` and
+`1` statuses as the CLI. The Myers edit-script builder stays private, so use
+`diff()` to calculate a diff from library code.
 
 `zdiff.applyScript(comptime T, alloc, script, old, new)` replays a
-`myers.Edit` script to reconstruct `new` from `old`; it's used internally
-(tests, benchmarks) to check that an edit script round-trips correctly, and
-takes the same `[]const myers.Edit` type the (currently internal) diff
-algorithm produces.
+`myers.Edit` script to rebuild `new` from `old`. It is mainly useful for tests
+and benchmarks, and takes the `[]const myers.Edit` produced by the internal
+diff engine.
 
-`diff()` caps the edit distance it will search at 6500 before giving up with
-`error.TooDifferent` — fine for typical file-sized diffs, but worth knowing
-if you point it at two files that share almost nothing.
+`diff()` returns `error.TooDifferent` once the edit distance crosses a
+GNU-diff-style limit based on input size. The lower bound is 4096.
 
 ## Testing
 
@@ -107,9 +114,9 @@ round-trips).
 zig build bench
 ```
 
-`src/bench.zig` times each pipeline stage (tokenize, diff, apply, hunk) over
-synthetic random inputs and, if present, a real-world corpus at
-`corpus/index.txt` (tab-separated `old\tnew` file pairs).
+`src/bench.zig` times tokenizing, diffing, applying, and hunk building on
+random data. If `corpus/index.txt` exists, it also uses those tab-separated
+`old\tnew` file pairs.
 
 Generate a corpus from any local git repo's history:
 
@@ -123,10 +130,10 @@ Compare the release CLI with GNU `diff` and `diff --minimal` using `hyperfine`:
 scripts/benchmark.sh
 ```
 
-This covers large files with few changes, completely different files within
-`zdiff`'s edit-distance limit, scattered edits, long common prefixes and
-suffixes, and 200 small-file invocations. Output rendering goes to
-`/dev/null`; each case is exported as JSON under `benchmark-results/`.
+The suite covers large files with small changes, scattered edits, long shared
+prefixes and suffixes, completely different files within the limit, and 200
+small-file runs. It sends rendering to `/dev/null` and saves JSON under
+`benchmark-results/`.
 
 Set `BENCH_SIZE_MB` (10 to 100), `BENCH_RUNS`, `BENCH_WARMUP`, or
 `BENCH_RESULTS` to override the defaults.
@@ -138,13 +145,12 @@ uv sync
 uv run python scripts/plot_benchmarks.py
 ```
 
-Pass a result directory or `--output FILE` to select another run or output
-path. Each case gets its own scale and shows mean runtime with standard
-deviation. The second column shows the peak memory reported by `hyperfine`.
-Each GNU variant measures memory in a separate `hyperfine` process because
-version 1.20 retains the first command's peak for later commands. Lower is
-better.
+Pass a result directory or `--output FILE` to choose another run or image
+path. Each case gets its own scale with mean runtime and standard deviation.
+The second column shows peak memory from `hyperfine`. GNU variants run in
+separate `hyperfine` processes because version 1.20 reuses the first command's
+peak for later commands. Lower values win.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

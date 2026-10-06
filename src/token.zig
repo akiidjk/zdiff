@@ -68,14 +68,14 @@ fn estimateLineCount(text: []const u8, separator: u8) usize {
     const separator_count = std.mem.count(u8, text[0..sample_len], &.{separator});
 
     if (sample_len == text.len)
-        return separator_count + 1; // we know exact line count
+        return separator_count + 1; // The exact line count is known.
 
     if (separator_count == 0)
-        return 16; // fallback we don't know the correct value
+        return 16; // No sample, so start small.
 
     const estimate = text.len * separator_count / sample_len + 1;
 
-    return estimate + estimate / 8; // + 12.5%
+    return estimate + estimate / 8; // Leave 12.5% headroom.
 }
 
 fn commonPrefix(old: []const u8, new: []const u8) usize {
@@ -256,8 +256,8 @@ test "two incomplete last lines with different text differ" {
 }
 
 test "incomplete line never collides with a complete line id" {
-    // `x` compare completa in old e incompleta in new: id diversi,
-    // e l'id incompleto non deve riusare nessun id di `lines`.
+    // A complete `x` and an incomplete `x` need different IDs. The incomplete
+    // one must not reuse an ID from `lines`.
     const a = std.testing.allocator;
     var intern: Interner = .{};
     defer intern.deinit(a);

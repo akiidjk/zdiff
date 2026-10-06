@@ -17,16 +17,14 @@ pub const Edit = struct {
 
 const Script = std.ArrayList(Edit);
 
-// ============================== ShortestEdit ==================================
-
-// This get the shortestEdit path with standard implementation and trimmed input
+// Find the shortest edit distance after dropping matching ends.
 pub fn shortestEdit(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !?usize {
     const pre = getLengthCommonPrefix(T, old, new);
     const suf = getLengthCommonSuffix(T, old[pre..], new[pre..]);
     return try shortestEditRaw(T, allocator, old[pre .. old.len - suf], new[pre .. new.len - suf], max_d);
 }
 
-// This give only the number of operation and nothing else without trimming
+// Find the shortest edit distance for untrimmed inputs.
 pub fn shortestEditRaw(comptime T: type, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize) !?usize {
     const N = old.len;
     const M = new.len;
@@ -49,13 +47,13 @@ pub fn shortestEditRaw(comptime T: type, allocator: std.mem.Allocator, old: []co
         }
         while (k <= offset + d) : (k += 2) {
             if (k == offset - d or (k != offset + d and V[k - 1] < V[k + 1])) {
-                x = V[k + 1]; //  insert B[y]
+                x = V[k + 1]; // Insert new[y].
             } else {
-                x = V[k - 1] + 1; // devare A[x-1]
+                x = V[k - 1] + 1; // Delete old[x - 1].
             }
 
             y = x + offset - k;
-            while (x < N and y < M and old[x] == new[y]) { // snake
+            while (x < N and y < M and old[x] == new[y]) { // Follow matching items.
                 x += 1;
                 y += 1;
             }
@@ -68,9 +66,7 @@ pub fn shortestEditRaw(comptime T: type, allocator: std.mem.Allocator, old: []co
     return null;
 }
 
-// ============================ PRELIMINARY OPERATION  ===========================
-
-// Get the length of common prefix with SIMD and @Vector
+// Find the shared prefix with SIMD vectors.
 pub fn getLengthCommonPrefix(comptime T: type, old: []const T, new: []const T) usize {
     const len = @min(old.len, new.len);
 
@@ -104,7 +100,7 @@ pub fn getLengthCommonPrefix(comptime T: type, old: []const T, new: []const T) u
     return len;
 }
 
-// Get the length of common suffix with SIMD and @Vector
+// Find the shared suffix with SIMD vectors.
 pub fn getLengthCommonSuffix(comptime T: type, old: []const T, new: []const T) usize {
     const len = @min(old.len, new.len);
 
@@ -150,7 +146,7 @@ pub fn getLengthCommonSuffix(comptime T: type, old: []const T, new: []const T) u
     return c;
 }
 
-// This add the missing Edit to the script from the trimming done before
+// Put edits for the trimmed prefix and suffix back into the script.
 fn addEdit(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Script {
     var fixedInner: Script = .empty;
     errdefer fixedInner.deinit(alloc);
@@ -205,7 +201,7 @@ fn addEdit(alloc: std.mem.Allocator, pre: usize, suf: usize, inner: Script) !Scr
     return fixedInner;
 }
 
-// Run diffRaw but with debug flag distinct
+// Run diffRaw with optional debug tracing.
 pub fn runDiffRaw(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
     if (!debug) return diff(T, allocator, old, new, max_d);
 
@@ -216,7 +212,7 @@ pub fn runDiffRaw(comptime T: type, comptime debug: bool, allocator: std.mem.All
     return result;
 }
 
-// Myers algoritm but with trimming
+// Run Myers after trimming matching ends.
 pub fn myersWTrimming(comptime T: type, comptime debug: bool, allocator: std.mem.Allocator, old: []const T, new: []const T, max_d: usize, io: if (debug) std.Io else void) !Script {
     const pre = blk: {
         if (debug) {
@@ -257,8 +253,6 @@ pub fn myersWTrimming(comptime T: type, comptime debug: bool, allocator: std.mem
 
     return try addEdit(allocator, pre, suf, inner);
 }
-
-// =========================== MAIN ALGO ===================================
 
 const Point = struct { usize, usize };
 
@@ -478,15 +472,15 @@ fn stepBackward(comptime T: type, box: Box, vf: []isize, vb: []isize, d: isize, 
         var y: isize = 0;
         var prevY: isize = 0;
         if (c == -d) {
-            // move leftward
+            // Move left.
             y = vb[try toVectorIndex(c + 1, offset)];
             prevY = y;
         } else if (c != d and vb[try toVectorIndex(c - 1, offset)] > vb[try toVectorIndex(c + 1, offset)]) {
-            // move leftward
+            // Move left.
             y = vb[try toVectorIndex(c + 1, offset)];
             prevY = y;
         } else {
-            // move upward
+            // Move up.
             prevY = vb[try toVectorIndex(c - 1, offset)];
             y = prevY - 1;
         }
@@ -526,7 +520,7 @@ fn stepBackward(comptime T: type, box: Box, vf: []isize, vb: []isize, d: isize, 
     return null;
 }
 
-// TOO_EXPENSIVE from GNU diffutils (analyze.c): ~sqrt of the input size, at least 4096.
+// GNU diffutils-style cutoff. Roughly sqrt(input size), never below 4096.
 pub fn tooExpensive(old_len: usize, new_len: usize) usize {
     var limit: usize = 1;
     var diags = old_len + new_len + 3;
@@ -534,7 +528,7 @@ pub fn tooExpensive(old_len: usize, new_len: usize) usize {
     return @max(4096, limit);
 }
 
-// Implementation of linear space myers algorithm returning the compare script
+// Linear-space Myers implementation that returns an edit script.
 pub fn diff(
     comptime T: type,
     allocator: std.mem.Allocator,
@@ -546,7 +540,7 @@ pub fn diff(
     var script: Script = .empty;
     errdefer script.deinit(allocator);
 
-    // Upper bound sicuro sui punti del path.
+    // Safe upper bound for path points.
     const snake_points = try allocator.alloc(
         Point,
         old.len + new.len + 1,
